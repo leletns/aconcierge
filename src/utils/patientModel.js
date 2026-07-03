@@ -1,6 +1,6 @@
 import { MARCOS, EXAMES_PADRAO } from './constants.js';
 import { uid } from './helpers.js';
-import { somarDias, difDias, hoje, isoHoje, nowISO } from './dates.js';
+import { somarDias, difDias, hoje, isoHoje, nowISO, normalizarData } from './dates.js';
 import { normalizePhone } from './phone.js';
 
 export function gerarMarcos(p) {
@@ -117,63 +117,110 @@ export function semearExemplos() {
   return [a, b, c];
 }
 
-/** Merge remote record — newer modifiedAt wins per field group */
 export function mergePatient(local, remote) {
   if (!remote) return local;
   if (!local) return remote;
   const lTime = new Date(local.modifiedAt || 0).getTime();
   const rTime = new Date(remote.modifiedAt || 0).getTime();
-  if (rTime > lTime) return { ...local, ...remote };
+  if (rTime > lTime) return { ...local, ...remote, marcos: { ...local.marcos, ...remote.marcos }, recall: { ...local.recall, ...remote.recall } };
   if (lTime > rTime) return local;
   return { ...remote, ...local };
 }
 
+function normalizeFase(f) {
+  const s = String(f || '').toLowerCase();
+  if (s.includes('pós') || s.includes('pos')) return 'posop';
+  return 'preop';
+}
+
+function examesPendentesText(p) {
+  return (p.exames || []).filter((e) => !e.feito).map((e) => e.nome).join(', ');
+}
+
+function applyExamesPendentes(p, text) {
+  if (!text) return;
+  const pendentes = String(text).split(/[,;|]/).map((s) => s.trim()).filter(Boolean);
+  p.exames.forEach((e) => {
+    e.feito = !pendentes.some((pend) => pend.toLowerCase() === e.nome.toLowerCase());
+  });
+  pendentes.forEach((nome) => {
+    if (!p.exames.find((e) => e.nome.toLowerCase() === nome.toLowerCase())) {
+      p.exames.push({ nome, feito: false });
+    }
+  });
+}
+
+/** Planilha simples — colunas que a Helen preenche manualmente no Google Sheets */
 export function patientToSheetRow(p) {
-  return {
+  const row = {
     id: p.id,
     nome: p.nome,
     telefone: p.telefone,
     procedimento: p.procedimento,
-    dataCirurgia: p.dataCirurgia,
-    fase: p.fase,
-    notion: p.notion,
-    obs: p.obs,
-    recall_status: p.recall?.status || '',
-    recall_proxima: p.recall?.proxima || '',
-    recall_historico: JSON.stringify(p.recall?.historico || []),
-    exames: JSON.stringify(p.exames || []),
-    marcos: JSON.stringify(p.marcos || {}),
+    data_cirurgia: p.dataCirurgia,
+    fase: p.fase === 'posop' ? 'pós-op' : 'pré-op',
+    observacoes: p.obs || '',
+    status_recall: p.recall?.status || '',
+    proxima_acao: p.recall?.proxima || '',
+    ultimo_contato: ultimoContato(p) ? `${ultimoContato(p).data} · ${ultimoContato(p).resultado}` : '',
+    notion: p.notion || '',
+    exames_pendentes: examesPendentesText(p),
     modifiedAt: p.modifiedAt || nowISO(),
     deleted: p.deleted ? 'TRUE' : 'FALSE',
   };
+  MARCOS.forEach((m) => {
+    row['marco_' + m.id] = p.marcos?.[m.id]?.status || 'a agendar';
+  });
+  return row;
 }
 
 export function sheetRowToPatient(row) {
-  if (!row?.id) return null;
+  if (!row) return null;
+  const id = row.id || row.ID;
+  if (!id && !row.nome) return null;
+
+  const dataRaw = row.data_cirurgia || row.dataCirurgia || '';
+  const dataCirurgia = normalizarData(dataRaw) || dataRaw;
+
   const p = novoPaciente({
-    id: row.id,
+    id: id || uid(),
     nome: row.nome || '',
     telefone: row.telefone || '',
     procedimento: row.procedimento || '',
-    dataCirurgia: row.dataCirurgia || '',
-    fase: row.fase || 'preop',
+    dataCirurgia: dataCirurgia,
+    fase: normalizeFase(row.fase),
     notion: row.notion || '',
-    obs: row.obs || '',
+    obs: row.observacoes || row.obs || '',
     modifiedAt: row.modifiedAt || nowISO(),
     deleted: row.deleted === true || row.deleted === 'TRUE',
     exemplo: false,
   });
+
+  p.recall.status = row.status_recall || row.recall_status || p.recall.status;
+  p.recall.proxima = normalizarData(row.proxima_acao || row.recall_proxima || '') || row.proxima_acao || row.recall_proxima || '';
+
+  MARCOS.forEach((m) => {
+    const st = row['marco_' + m.id];
+    if (st) {
+      if (!p.marcos[m.id]) p.marcos[m.id] = { status: st, data: somarDias(p.dataCirurgia || isoHoje(), m.dias) };
+      else p.marcos[m.id].status = st;
+    }
+  });
+
+  if (row.exames_pendentes) applyExamesPendentes(p, row.exames_pendentes);
+
+  // compatibilidade JSON legado
+  try {
+    if (row.exames && String(row.exames).startsWith('[')) p.exames = JSON.parse(row.exames);
+  } catch (_) {}
+  try {
+    if (row.marcos && String(row.marcos).startsWith('{')) Object.assign(p.marcos, JSON.parse(row.marcos));
+  } catch (_) {}
   try {
     if (row.recall_historico) p.recall.historico = JSON.parse(row.recall_historico);
   } catch (_) {}
-  p.recall.status = row.recall_status || p.recall.status;
-  p.recall.proxima = row.recall_proxima || '';
-  try {
-    if (row.exames) p.exames = JSON.parse(row.exames);
-  } catch (_) {}
-  try {
-    if (row.marcos) p.marcos = JSON.parse(row.marcos);
-  } catch (_) {}
+
+  if (p.dataCirurgia) gerarMarcos(p);
   return p;
 }
 

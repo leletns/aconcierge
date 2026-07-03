@@ -46,7 +46,7 @@ syncService.store = store;
 
 const config = loadConfig();
 const summaryService = new SummaryService({ geminiApiKey: config.geminiApiKey });
-syncService.configure(config);
+summaryService.setSheetsApi(syncService.api);
 syncService.onStatus((s) => renderSyncIndicator(s));
 
 function renderizarTudo() {
@@ -441,10 +441,10 @@ function abrirFicha(id) {
       <div class="meta">${esc(p.procedimento || 'sem procedimento')} · ${p.dataCirurgia ? 'cirurgia em ' + fmtLonga(p.dataCirurgia) : 'sem data de cirurgia'}</div></div>
     </div>
     <div class="ficha-acoes">
-      ${buildWhatsAppLink(p.telefone) ? `<button class="btn btn-wa btn-wa-ficha" data-id="${p.id}">WhatsApp</button>` : ''}
-      ${p.notion ? `<button class="btn btn-claro btn-notion-ficha" data-url="${esc(p.notion)}">cronograma no notion ↗</button>` : ''}
+      ${buildWhatsAppLink(p.telefone) ? `<button type="button" class="btn btn-wa btn-wa-ficha" data-wa-url="${esc(buildWhatsAppLink(p.telefone))}">WhatsApp</button>` : ''}
+      <button type="button" class="btn btn-gemini" id="btn-ficha-resumir">✨ Resumir com Gemini</button>
+      ${p.notion ? `<button class="btn btn-claro btn-notion-ficha" data-url="${esc(p.notion)}">notion ↗</button>` : ''}
       <button class="btn btn-claro" id="btn-ficha-contato">registrar contato</button>
-      <button class="btn btn-claro" id="btn-ficha-resumir">✨ Resumir</button>
       <button class="btn btn-claro" id="btn-ficha-editar">editar dados</button>
     </div>
     ${emPosOp(p) ? `<div class="ficha-secao"><h4>jornada pós-op</h4>
@@ -462,8 +462,12 @@ function abrirFicha(id) {
     abrirContato(p.id);
   });
   $('#btn-ficha-editar')?.addEventListener('click', () => editarPaciente(p.id));
-  $('#btn-ficha-resumir')?.addEventListener('click', () => gerarResumo(p.id));
-  $('.btn-wa-ficha')?.addEventListener('click', () => window.open(buildWhatsAppLink(p.telefone), '_blank'));
+  $('#btn-ficha-resumir')?.addEventListener('click', () => gerarResumo(p.id, true));
+  document.querySelector('.btn-wa-ficha')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const url = e.currentTarget.getAttribute('data-wa-url');
+    if (url) window.location.href = url;
+  });
   $('.btn-notion-ficha')?.addEventListener('click', (e) => window.open(e.target.dataset.url));
   $('.btn-excluir')?.addEventListener('click', () => excluirPaciente(p.id));
   abrir('veu-ficha');
@@ -513,7 +517,9 @@ function salvarPaciente(opts = {}) {
   }
   const base = {
     nome,
-    telefone: $('#p-fone').value.trim(),
+    telefone: parsePhone($('#p-fone').value.trim()).valid
+      ? parsePhone($('#p-fone').value.trim()).e164
+      : $('#p-fone').value.trim(),
     procedimento: $('#p-proc').value.trim(),
     dataCirurgia: $('#p-data').value,
     fase: $('#p-fase').value,
@@ -545,12 +551,17 @@ async function exportarDados() {
     showToast('nenhum registro para exportar');
     return;
   }
-  showLoadingToast('exportando…');
+  const btn = $('#btn-exportar');
+  btn?.classList.add('loading');
+  showLoadingToast('gerando XLSX…');
   try {
     const filename = exportToXlsx(patients);
-    showToast(`exportado: ${filename}`);
+    showToast(`✓ ${filename}`);
   } catch (e) {
-    showToast('erro na exportação');
+    console.error(e);
+    showToast('erro: ' + (e.message || 'exportação falhou'));
+  } finally {
+    btn?.classList.remove('loading');
   }
 }
 
@@ -559,12 +570,13 @@ async function gerarResumo(id, regenerate = false) {
   if (!p) return;
   summaryPatientId = p.id;
   abrir('veu-resumo');
-  $('#resumo-conteudo').innerHTML = '<div class="loading-state"><span class="spinner"></span> Gerando resumo…</div>';
+  $('#resumo-conteudo').innerHTML = '<div class="loading-state"><span class="spinner"></span> Gerando resumo com Gemini…</div>';
 
   try {
-    const result = await summaryService.summarize(p, { preferAi: regenerate || Boolean(config.geminiApiKey) });
+    const result = await summaryService.summarize(p, { preferAi: true });
     summaryText = result.text;
-    $('#resumo-sub').textContent = `${p.nome} · via ${result.provider}`;
+    const via = result.provider === 'gemini-sheets' ? 'Gemini (planilha)' : result.provider;
+    $('#resumo-sub').textContent = `${p.nome} · ${via}`;
     $('#resumo-conteudo').innerHTML = `<pre class="resumo-texto">${esc(summaryText)}</pre>`;
   } catch (e) {
     $('#resumo-conteudo').innerHTML = `<div class="vazio"><strong>Erro</strong>${esc(e.message)}</div>`;
@@ -590,24 +602,44 @@ function bindSummaryModal() {
   $('#btn-resumo-fechar')?.addEventListener('click', () => closeSummaryModal());
 }
 
+function updateSheetLink() {
+  const btn = $('#btn-abrir-planilha');
+  if (config.spreadsheetUrl && btn) {
+    btn.style.display = 'inline-flex';
+    btn.onclick = () => window.open(config.spreadsheetUrl, '_blank');
+  }
+}
+
 function bindConfigModal() {
   $('#cfg-webapp').value = config.webAppUrl || '';
   $('#cfg-secret').value = config.apiSecret || '';
-  $('#cfg-gemini').value = config.geminiApiKey || '';
+  $('#cfg-sheet-url').value = config.spreadsheetUrl || '';
 
-  $('#btn-salvar-config')?.addEventListener('click', () => {
+  $('#btn-salvar-config')?.addEventListener('click', async () => {
+    const btn = $('#btn-salvar-config');
+    btn.classList.add('loading');
+    btn.textContent = 'sincronizando…';
     const next = {
       webAppUrl: $('#cfg-webapp').value.trim(),
       apiSecret: $('#cfg-secret').value.trim(),
-      geminiApiKey: $('#cfg-gemini').value.trim(),
-      lastSyncAt: config.lastSyncAt,
+      spreadsheetUrl: $('#cfg-sheet-url').value.trim(),
+      lastSyncAt: '',
     };
     Object.assign(config, next);
     saveConfig(config);
-    summaryService.setGeminiKey(next.geminiApiKey);
-    syncService.configure(next);
-    fechar('veu-config');
-    showToast('configuração salva');
+    summaryService.setSheetsApi(syncService.api);
+    try {
+      await syncService.configure(next);
+      summaryService.setSheetsApi(syncService.api);
+      updateSheetLink();
+      fechar('veu-config');
+      showToast('planilha conectada — sync automático ativo');
+    } catch (e) {
+      showToast('erro: ' + e.message);
+    } finally {
+      btn.classList.remove('loading');
+      btn.textContent = 'conectar e sincronizar';
+    }
   });
 }
 
@@ -618,18 +650,27 @@ function validatePhoneInput() {
   if (!v) {
     el.classList.remove('invalid');
     hint.textContent = '';
-    hint.className = 'campo-hint';
     return;
   }
   const p = parsePhone(v);
   if (p.valid) {
     el.classList.remove('invalid');
-    hint.textContent = p.display;
+    const flag = p.countryCode === '55' ? 'Brasil · DDD ' + (p.ddd || '—') : 'Internacional · +' + p.countryCode;
+    hint.textContent = `${flag} → ${p.e164}`;
     hint.className = 'campo-ok';
   } else {
     el.classList.add('invalid');
-    hint.textContent = 'número inválido';
+    hint.textContent = 'número inválido — inclua DDD ou +DDI';
     hint.className = 'campo-hint';
+  }
+}
+
+function normalizePhoneOnBlur() {
+  const el = $('#p-fone');
+  const p = parsePhone(el.value.trim());
+  if (p.valid) {
+    el.value = p.display;
+    validatePhoneInput();
   }
 }
 
@@ -850,10 +891,16 @@ function initApp() {
   $('#btn-nova-paciente')?.addEventListener('click', () => abrirNovaPaciente());
   $('#btn-nova-paciente-ret')?.addEventListener('click', () => abrirNovaPaciente());
   $('#btn-nova-cirurgia')?.addEventListener('click', () => abrirNovaPaciente(true));
-  $('#btn-importar')?.addEventListener('click', () => abrirImportar());
-  $('#btn-importar-recall')?.addEventListener('click', () => abrirImportar('recall'));
+  $('#btn-importar-recall')?.addEventListener('click', () => {
+    if (config.spreadsheetUrl) window.open(config.spreadsheetUrl, '_blank');
+    else {
+      abrir('veu-config');
+      showToast('conecte a planilha — sync automático, sem importar CSV');
+    }
+  });
   $('#btn-exportar')?.addEventListener('click', () => exportarDados());
   $('#btn-config')?.addEventListener('click', () => abrir('veu-config'));
+  $('#btn-abrir-planilha')?.addEventListener('click', () => config.spreadsheetUrl && window.open(config.spreadsheetUrl, '_blank'));
   $('#btn-salvar-paciente')?.addEventListener('click', () => salvarPaciente());
   $('#btn-salvar-contato')?.addEventListener('click', () => salvarContato());
   $('#btn-confirmar-import')?.addEventListener('click', () => confirmarImportacao());
@@ -863,7 +910,8 @@ function initApp() {
     else showToast('cadastre uma paciente primeiro');
   });
 
-  $('#p-fone')?.addEventListener('input', debounce(validatePhoneInput, 200));
+  $('#p-fone')?.addEventListener('input', debounce(validatePhoneInput, 150));
+  $('#p-fone')?.addEventListener('blur', normalizePhoneOnBlur);
 
   const formPaciente = $('#veu-paciente .modal');
   if (formPaciente) {
@@ -931,8 +979,14 @@ function initApp() {
   bindSummaryModal();
   bindConfigModal();
   renderizarTudo();
+  updateSheetLink();
 
-  if (!syncService.configured) renderSyncIndicator({ status: 'offline', detail: 'Configure Google Sheets em ⚙' });
+  if (syncService.configured) {
+    syncService.configure(config).then(() => summaryService.setSheetsApi(syncService.api)).catch(() => {});
+  } else if (!config.webAppUrl) {
+    renderSyncIndicator({ status: 'offline', detail: 'Conecte a planilha Google' });
+    setTimeout(() => abrir('veu-config'), 1200);
+  }
 }
 
 initApp();

@@ -12,7 +12,7 @@
 <div class="app">
 
   <aside class="sidebar">
-    <div class="wordmark">blue<span class="ponto">.</span><small>central da concierge</small></div>
+    <div class="wordmark"><span class="logo-thin">blue</span><span class="ponto"> .</span><small>central da concierge</small></div>
     <nav class="nav" id="nav">
       <button data-tela="hoje" class="ativo">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
@@ -32,19 +32,19 @@
       </button>
     </nav>
     <div class="sidebar-rodape">
-      <button class="nav-extra btn-fantasma btn" id="btn-importar" type="button">
-        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
-        <span>importar planilha</span>
-      </button>
-      <button class="nav-extra btn-fantasma btn" id="btn-exportar" type="button">
+      <button class="nav-extra btn btn-exportar-sidebar" id="btn-exportar" type="button">
         <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M4 19h16"/></svg>
         <span>exportar XLSX</span>
       </button>
-      <button class="nav-extra btn-fantasma btn" id="btn-config" type="button" title="Google Sheets &amp; Gemini">
-        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        <span>configurar sync</span>
+      <button class="nav-extra btn-fantasma btn" id="btn-abrir-planilha" type="button" style="display:none">
+        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/></svg>
+        <span>abrir Google Sheets</span>
       </button>
-      <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>local</span></div>
+      <button class="nav-extra btn-fantasma btn" id="btn-config" type="button" title="Sync automático com Google Sheets">
+        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <span>conectar planilha</span>
+      </button>
+      <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>aguardando planilha</span></div>
       <div class="atalho-k"><kbd>⌘</kbd><kbd>K</kbd> buscar paciente</div>
     </div>
   </aside>
@@ -97,7 +97,7 @@
         </div>
         <div class="acoes-cabecalho">
           <button class="btn btn-claro" id="btn-importar-recall" type="button">
-            <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg> importar planilha de recall
+            <svg viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/></svg> abrir planilha
           </button>
         </div>
       </div>
@@ -130,7 +130,7 @@
   </main>
 </div>
 
-<button type="button" class="fab-resumir" id="fab-resumir" title="Resumir paciente">✨ Resumir</button>
+<button type="button" class="fab-resumir" id="fab-resumir" title="Resumir paciente — estilo Gemini">✨ Resumir</button>
 
 <div class="veu" id="veu-paciente">
   <div class="modal">
@@ -208,16 +208,16 @@
 
 <div class="veu" id="veu-config">
   <div class="modal">
-    <h3>configuração<span class="ponto">.</span></h3>
-    <div class="modal-sub">Google Sheets sync bidirecional + Gemini API (opcional)</div>
+    <h3>conectar planilha<span class="ponto">.</span></h3>
+    <div class="modal-sub">Sync <strong>automático</strong> — edite no Google Sheets ou aqui, espelha nos dois lados. Sem importar CSV.</div>
     <div class="config-grid">
-      <div class="campo-grupo"><label>Web App URL (Apps Script)</label><input class="campo" id="cfg-webapp" placeholder="https://script.google.com/macros/s/.../exec"></div>
-      <div class="campo-grupo"><label>API Secret</label><input class="campo" id="cfg-secret" type="password" placeholder="mesmo valor do Script Properties"></div>
-      <div class="campo-grupo"><label>Gemini API Key (opcional)</label><input class="campo" id="cfg-gemini" type="password" placeholder="AIza..."></div>
+      <div class="campo-grupo"><label>URL da planilha Google Sheets</label><input class="campo" id="cfg-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
+      <div class="campo-grupo"><label>Web App URL (Apps Script → Implantar)</label><input class="campo" id="cfg-webapp" placeholder="https://script.google.com/macros/s/.../exec"></div>
+      <div class="campo-grupo"><label>API Secret (Script Properties)</label><input class="campo" id="cfg-secret" type="password" placeholder="SHEETS_API_SECRET"></div>
     </div>
     <div class="modal-rodape">
       <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-config').classList.remove('aberto')">cancelar</button>
-      <button class="btn btn-azul" id="btn-salvar-config" type="button">salvar</button>
+      <button class="btn btn-azul" id="btn-salvar-config" type="button">conectar e sincronizar</button>
     </div>
   </div>
 </div>

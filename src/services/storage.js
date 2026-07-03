@@ -27,6 +27,7 @@ export function loadConfig() {
     webAppUrl: import.meta.env.VITE_SHEETS_WEBAPP_URL || '',
     apiSecret: import.meta.env.VITE_SHEETS_API_SECRET || '',
     geminiApiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
+    spreadsheetUrl: import.meta.env.VITE_SPREADSHEET_URL || '',
     lastSyncAt: '',
   };
 }

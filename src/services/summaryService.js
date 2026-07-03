@@ -1,5 +1,5 @@
 /**
- * Summary providers — local structured generator + Gemini API integration
+ * Resumo estilo Gemini do Google Sheets — via Apps Script (preferido) ou cliente
  */
 
 import { fmtLonga, difDias } from '../utils/dates.js';
@@ -13,96 +13,52 @@ export class LocalSummaryProvider {
 
     if (emPreOp(patient)) {
       const pendentes = (patient.exames || []).filter((e) => !e.feito);
-      if (pendentes.length) {
-        pendencias.push(`${pendentes.length} exame(s) pendente(s): ${pendentes.map((e) => e.nome).slice(0, 3).join(', ')}${pendentes.length > 3 ? '…' : ''}`);
-      }
+      if (pendentes.length) pendencias.push(`${pendentes.length} exame(s): ${pendentes.map((e) => e.nome).slice(0, 3).join(', ')}`);
       const dd = difDias(patient.dataCirurgia);
       if (dd !== null && dd <= 10) pendencias.push(`cirurgia em ${dd === 0 ? 'hoje' : dd + ' dias'}`);
     }
-
     if (emPosOp(patient)) {
       MARCOS.forEach((m) => {
-        const st = estadoMarco(patient, m);
-        if (st === 'atrasado') pendencias.push(`retorno ${m.rotulo} atrasado`);
+        if (estadoMarco(patient, m) === 'atrasado') pendencias.push(`retorno ${m.rotulo} atrasado`);
       });
     }
-
-    if (patient.recall?.status === 'aguardando contato' || patient.recall?.status === 'sem resposta') {
+    if (['aguardando contato', 'sem resposta'].includes(patient.recall?.status)) {
       pendencias.push(`recall: ${patient.recall.status}`);
     }
 
     let proximoPasso = '—';
-    if (px && px.mc.status !== 'realizado') {
-      proximoPasso = `Agendar retorno de ${px.m.rotulo} (${px.mc.status})`;
-    } else if (emPreOp(patient)) {
-      const faltam = (patient.exames || []).filter((e) => !e.feito).length;
-      proximoPasso = faltam ? `Concluir ${faltam} exame(s) pré-operatório(s)` : 'Paciente pronta para cirurgia';
-    } else if (patient.recall?.proxima) {
-      proximoPasso = `Próximo contato de recall em ${fmtLonga(patient.recall.proxima)}`;
-    }
+    if (px && px.mc.status !== 'realizado') proximoPasso = `Agendar ${px.m.rotulo} (${px.mc.status})`;
+    else if (emPreOp(patient)) {
+      const f = (patient.exames || []).filter((e) => !e.feito).length;
+      proximoPasso = f ? `Concluir ${f} exame(s)` : 'Pronta para cirurgia';
+    } else if (patient.recall?.proxima) proximoPasso = `Contato em ${fmtLonga(patient.recall.proxima)}`;
 
     const uc = ultimoContato(patient);
-    const obs = [];
-    if (patient.obs) obs.push(patient.obs);
-    if (uc) obs.push(`Último contato: ${uc.canal} — ${uc.resultado}${uc.nota ? ' (' + uc.nota + ')' : ''}`);
+    const obs = [patient.obs, uc ? `${uc.canal}: ${uc.resultado}` : ''].filter(Boolean).join(' · ');
 
-    const status =
-      emPreOp(patient)
-        ? `Pré-operatório · cirurgia ${fmtLonga(patient.dataCirurgia)}`
-        : `Pós-operatório · operada em ${fmtLonga(patient.dataCirurgia)}`;
-
-    const lines = [
-      'Resumo da Paciente',
-      '',
+    const text = [
+      'Resumo da Paciente', '',
       `• Nome: ${patient.nome}`,
       `• Procedimento: ${patient.procedimento || '—'}`,
-      `• Telefone: ${formatPhoneDisplay(patient.telefone) || '—'}`,
-      `• Status: ${status}`,
-      `• Pendências: ${pendencias.length ? pendencias.join('; ') : 'Nenhuma pendência crítica'}`,
+      `• Status: ${emPreOp(patient) ? 'Pré-op' : 'Pós-op'}`,
+      `• Pendências: ${pendencias.length ? pendencias.join('; ') : 'Nenhuma'}`,
       `• Próximo passo: ${proximoPasso}`,
-      `• Observações importantes: ${obs.length ? obs.join(' · ') : '—'}`,
-    ];
+      `• Observações importantes: ${obs || '—'}`,
+    ].join('\n');
 
-    return { text: lines.join('\n'), provider: 'local' };
+    return { text, provider: 'local' };
   }
 }
 
-export class GeminiSummaryProvider {
+export class ClientGeminiProvider {
   constructor(apiKey) {
     this.apiKey = apiKey;
   }
-
   get configured() {
     return Boolean(this.apiKey);
   }
-
   async generate(patient) {
-    const local = new LocalSummaryProvider();
-    const context = await local.generate(patient);
-
-    const prompt = `Você é assistente de uma concierge médica (cirurgia plástica). Com base nos dados abaixo, gere um resumo estruturado em português brasileiro com exatamente estas seções em bullet points:
-
-Resumo da Paciente
-• Nome
-• Procedimento
-• Status
-• Pendências
-• Próximo passo
-• Observações importantes
-
-Seja concisa e profissional. Dados:
-${JSON.stringify({
-  nome: patient.nome,
-  procedimento: patient.procedimento,
-  telefone: patient.telefone,
-  dataCirurgia: patient.dataCirurgia,
-  fase: patient.fase,
-  recall: patient.recall,
-  exames: patient.exames,
-  marcos: patient.marcos,
-  obs: patient.obs,
-}, null, 2)}`;
-
+    const prompt = `Resumo da Paciente em português (bullet points): Nome, Procedimento, Status, Pendências, Próximo passo, Observações.\n\n${JSON.stringify(patient)}`;
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`,
       {
@@ -110,39 +66,45 @@ ${JSON.stringify({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+          generationConfig: { temperature: 0.35, maxOutputTokens: 1024 },
         }),
       },
     );
-
     const data = await res.json();
-    if (!res.ok || data.error) {
-      throw new Error(data.error?.message || 'Erro na API Gemini');
-    }
-
+    if (!res.ok || data.error) throw new Error(data.error?.message || 'Gemini error');
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Resposta vazia da Gemini');
+    if (!text) throw new Error('Resposta vazia');
     return { text: text.trim(), provider: 'gemini' };
   }
 }
 
 export class SummaryService {
-  constructor(config = {}) {
+  constructor({ geminiApiKey, sheetsApi } = {}) {
     this.local = new LocalSummaryProvider();
-    this.gemini = config.geminiApiKey ? new GeminiSummaryProvider(config.geminiApiKey) : null;
+    this.clientGemini = geminiApiKey ? new ClientGeminiProvider(geminiApiKey) : null;
+    this.sheetsApi = sheetsApi || null;
+  }
+
+  setSheetsApi(api) {
+    this.sheetsApi = api;
   }
 
   setGeminiKey(key) {
-    this.gemini = key ? new GeminiSummaryProvider(key) : null;
+    this.clientGemini = key ? new ClientGeminiProvider(key) : null;
   }
 
+  /** Preferência: Apps Script Gemini (como Sheets) → cliente Gemini → local */
   async summarize(patient, { preferAi = true } = {}) {
-    if (preferAi && this.gemini?.configured) {
+    if (preferAi && this.sheetsApi?.configured) {
       try {
-        return await this.gemini.generate(patient);
-      } catch (_) {
-        return this.local.generate(patient);
-      }
+        const result = await this.sheetsApi.summarizePatient(patient);
+        return { text: result.text, provider: result.provider || 'gemini-sheets' };
+      } catch (_) {}
+    }
+    if (preferAi && this.clientGemini?.configured) {
+      try {
+        return await this.clientGemini.generate(patient);
+      } catch (_) {}
     }
     return this.local.generate(patient);
   }

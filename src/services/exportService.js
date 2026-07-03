@@ -38,33 +38,48 @@ function rowFromPatient(p) {
   };
 }
 
+function downloadBlob(buffer, filename) {
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    a.remove();
+  }, 200);
+}
+
 /**
- * Export filtered patients to XLSX
- * @param {Array} patients
- * @param {{ onProgress?: (pct: number) => void }} opts
+ * Export filtered patients to XLSX — reliable Blob download (all browsers)
  */
 export function exportToXlsx(patients, opts = {}) {
   const { onProgress } = opts;
+  if (!patients?.length) throw new Error('Nenhum registro para exportar');
+
   const headers = EXPORT_COLUMNS.map((c) => c.header);
   const rows = [headers];
 
-  const chunk = 500;
   for (let i = 0; i < patients.length; i++) {
     const r = rowFromPatient(patients[i]);
     rows.push(EXPORT_COLUMNS.map((c) => r[c.key] ?? ''));
-    if (onProgress && i % chunk === 0) {
-      onProgress(Math.round((i / patients.length) * 100));
-    }
+    if (onProgress && i % 200 === 0) onProgress(Math.round((i / patients.length) * 90));
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = EXPORT_COLUMNS.map(() => ({ wch: 22 }));
+  ws['!cols'] = EXPORT_COLUMNS.map(() => ({ wch: 24 }));
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Pacientes');
 
   const filename = `Blue_Central_${exportFilenameTimestamp()}.xlsx`;
-  XLSX.writeFile(wb, filename, { bookType: 'xlsx', type: 'binary' });
+  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  downloadBlob(buffer, filename);
 
   if (onProgress) onProgress(100);
   return filename;

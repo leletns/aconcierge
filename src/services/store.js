@@ -99,6 +99,29 @@ export class Store {
     this._persist();
   }
 
+  /** Espelha planilha Google Sheets — automático, sem importar CSV */
+  applySheetMirror(remotePatients) {
+    const remoteIds = new Set(remotePatients.map((p) => p.id));
+    const exemplos = this.dados.pacientes.filter((p) => p.exemplo);
+
+    this.dados.pacientes = exemplos;
+
+    for (const rp of remotePatients) {
+      if (rp.deleted) continue;
+      const existing = this.dados.pacientes.find((p) => p.id === rp.id);
+      if (existing) Object.assign(existing, rp);
+      else this.dados.pacientes.push(rp);
+    }
+
+    // remove pacientes locais (não exemplo) que sumiram da planilha
+    this.dados.pacientes = this.dados.pacientes.filter(
+      (p) => p.exemplo || remoteIds.has(p.id),
+    );
+
+    this._persist(true);
+    this.onChange();
+  }
+
   setFilter(key, value) {
     this.filters[key] = value;
     this.onChange();
