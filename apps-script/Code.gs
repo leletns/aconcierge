@@ -16,6 +16,7 @@
  * 4. Implantar → Nova implantação → App da Web → Executar como: Eu · Acesso: Qualquer pessoa
  *
  * beautifySheets() aplica SÓ formatação (cores, freeze, filtros) — nunca altera valores.
+ * Recall: título com células mescladas — congela só linhas, não colunas.
  */
 
 var PROPS = PropertiesService.getScriptProperties();
@@ -78,10 +79,13 @@ function nowISO_() {
 
 /* ================= acesso às planilhas ================= */
 
+var DEFAULT_RECALL_ID = '1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU';
+var DEFAULT_CIRURGIAS_ID = '1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI';
+
 function getSpreadsheet_(kind) {
   var prop = kind === 'recall' ? 'RECALL_SHEET_ID' : 'CIRURGIAS_SHEET_ID';
-  var id = PROPS.getProperty(prop);
-  if (!id) throw new Error('Script Property ' + prop + ' não configurada');
+  var fallback = kind === 'recall' ? DEFAULT_RECALL_ID : DEFAULT_CIRURGIAS_ID;
+  var id = PROPS.getProperty(prop) || fallback;
   return SpreadsheetApp.openById(id);
 }
 
@@ -400,12 +404,30 @@ function installTriggers() {
 
 /* ================= beautify — SÓ formatação, nunca valores ================= */
 
-function beautifySheets() {
-  beautifyOne_(getSheetContext_('recall'), {
+/** Planilhas com células mescladas quebram freeze/filtro — cada passo é opcional. */
+function beautifyTry_(label, fn) {
+  try {
+    fn();
+    return true;
+  } catch (e) {
+    Logger.log('beautify [' + label + ']: ' + e.message);
+    return false;
+  }
+}
+
+function beautifyRecallOnly() {
+  beautifyOne_(getSheetContext_('recall'), beautifyOptsRecall_());
+}
+
+function beautifyCirurgiasOnly() {
+  beautifyOne_(getSheetContext_('cirurgias'), beautifyOptsCirurgias_());
+}
+
+function beautifyOptsRecall_() {
+  return {
     header: '#4A6484',
     headerFont: '#FFFFFF',
     banda: '#F4F1EB',
-    freezeCols: 1,
     statusCol: 'status',
     statusCores: {
       'Agendado': '#EDF3EF',
@@ -415,12 +437,14 @@ function beautifySheets() {
       'Não agendou': '#F1F0EC',
       'Sem interesse': '#F1F0EC',
     },
-  });
-  beautifyOne_(getSheetContext_('cirurgias'), {
+  };
+}
+
+function beautifyOptsCirurgias_() {
+  return {
     header: '#4A6484',
     headerFont: '#FFFFFF',
     banda: '#F4F1EB',
-    freezeCols: 2,
     statusCol: null,
     marcoCols: ['m3m', 'm6m', 'm1a'],
     statusCores: {
@@ -429,75 +453,120 @@ function beautifySheets() {
       'Pendente': '#F8F0E4',
       'Sem resposta': '#F6E9E6',
     },
-  });
+  };
 }
 
+function beautifySheets() {
+  var ok = 0;
+  var avisos = [];
+  [['recall', beautifyOptsRecall_()], ['cirurgias', beautifyOptsCirurgias_()]].forEach(function (par) {
+    try {
+      var aviso = beautifyOne_(getSheetContext_(par[0]), par[1]);
+      ok++;
+      if (aviso) avisos.push(par[0] + ': ' + aviso);
+    } catch (e) {
+      avisos.push(par[0] + ': ' + e.message);
+      Logger.log('beautify ' + par[0] + ': ' + e.message);
+    }
+  });
+  var msg = ok + '/2 planilhas formatadas';
+  if (avisos.length) msg += ' · ' + avisos.join(' · ');
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast(msg, 'blue.', 10);
+  } catch (e) {
+    Logger.log(msg);
+  }
+}
+
+/**
+ * Formata uma aba. Nunca altera valores. Nunca lança erro por freeze/filtro/mesclagem.
+ * @returns {string} aviso curto ou '' se tudo ok
+ */
 function beautifyOne_(ctx, opts) {
   var sheet = ctx.sheet;
   var lastRow = Math.max(sheet.getLastRow(), ctx.headerRow + 1);
   var lastCol = Math.max(1, sheet.getLastColumn());
+  var numDataRows = Math.max(1, lastRow - ctx.headerRow);
+  var avisos = [];
 
-  // bloco de título acima do cabeçalho (Recall: "GESTÃO DE RECALL — PACIENTES")
+  // título (Recall linhas 1–4) — ignora se mesclagem impedir
   if (ctx.headerRow > 1) {
-    sheet.getRange(1, 1, ctx.headerRow - 1, lastCol).setFontFamily('Montserrat').setBackground('#FDFCFA');
-    if (ctx.headerRow >= 4) {
-      sheet.getRange(2, 1, 1, lastCol).setFontSize(14).setFontWeight('bold').setFontColor('#4A6484');
-      sheet.getRange(3, 1, 1, lastCol).setFontSize(9).setFontStyle('italic').setFontColor('#6E7681');
-    }
+    beautifyTry_('titulo', function () {
+      sheet.getRange(1, 1, ctx.headerRow - 1, lastCol)
+        .setFontFamily('Montserrat')
+        .setBackground('#FDFCFA');
+    });
   }
 
-  var header = sheet.getRange(ctx.headerRow, 1, 1, lastCol);
-  header
-    .setFontWeight('bold')
-    .setFontFamily('Montserrat')
-    .setBackground(opts.header)
-    .setFontColor(opts.headerFont)
-    .setVerticalAlignment('middle');
-  sheet.setFrozenRows(ctx.headerRow);
-  if (opts.freezeCols) sheet.setFrozenColumns(opts.freezeCols);
-
-  var dados = sheet.getRange(ctx.headerRow + 1, 1, lastRow - ctx.headerRow, lastCol);
-  dados
-    .setFontFamily('Montserrat')
-    .setVerticalAlignment('middle')
-    .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
-
-  // zebra creme/papel (formatação condicional de status tem prioridade sobre a banda)
-  sheet.getBandings().forEach(function (b) { b.remove(); });
-  var banda = dados.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, false, false);
-  banda.setFirstRowColor('#FDFCFA');
-  banda.setSecondRowColor(opts.banda);
-
-  // filtro nativo no cabeçalho
-  var filtro = sheet.getFilter();
-  if (filtro) filtro.remove();
-  sheet.getRange(ctx.headerRow, 1, lastRow - ctx.headerRow + 1, lastCol).createFilter();
-
-  // cores por status (formatação condicional — não altera valores)
-  var regras = [];
-  var alvoCols = opts.marcoCols
-    ? opts.marcoCols.map(function (f) { return ctx.cols[f]; }).filter(Boolean)
-    : (ctx.cols[opts.statusCol] ? [ctx.cols[opts.statusCol]] : []);
-  alvoCols.forEach(function (col) {
-    var range = sheet.getRange(ctx.headerRow + 1, col, lastRow - ctx.headerRow, 1);
-    Object.keys(opts.statusCores).forEach(function (valor) {
-      regras.push(
-        SpreadsheetApp.newConditionalFormatRule()
-          .whenTextEqualTo(valor)
-          .setBackground(opts.statusCores[valor])
-          .setRanges([range])
-          .build(),
-      );
-    });
+  beautifyTry_('cabecalho', function () {
+    sheet.getRange(ctx.headerRow, 1, 1, lastCol)
+      .setFontWeight('bold')
+      .setFontFamily('Montserrat')
+      .setBackground(opts.header)
+      .setFontColor(opts.headerFont)
+      .setVerticalAlignment('middle');
   });
-  if (regras.length) sheet.setConditionalFormatRules(regras);
 
-  if (ctx.cols.nome) sheet.setColumnWidth(ctx.cols.nome, 230);
-  if (ctx.cols.paciente) sheet.setColumnWidth(ctx.cols.paciente, 230);
-  if (ctx.cols.cirurgia) sheet.setColumnWidth(ctx.cols.cirurgia, 300);
-  if (ctx.cols.obs) sheet.setColumnWidth(ctx.cols.obs, 320);
+  // NÃO congela linhas/colunas — Recall tem mesclagens que quebram freeze
+  beautifyTry_('descongelar', function () {
+    sheet.setFrozenRows(0);
+    sheet.setFrozenColumns(0);
+  });
 
-  ctx.ss.toast('Formatação aplicada — valores intocados', 'blue.', 4);
+  beautifyTry_('dados', function () {
+    sheet.getRange(ctx.headerRow + 1, 1, numDataRows, lastCol)
+      .setFontFamily('Montserrat')
+      .setVerticalAlignment('middle')
+      .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+  });
+
+  beautifyTry_('banda', function () {
+    sheet.getBandings().forEach(function (b) { b.remove(); });
+    if (numDataRows < 1) return;
+    var banda = sheet.getRange(ctx.headerRow + 1, 1, numDataRows, lastCol)
+      .applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, false, false);
+    banda.setFirstRowColor('#FDFCFA');
+    banda.setSecondRowColor(opts.banda);
+  });
+
+  beautifyTry_('filtro', function () {
+    var filtro = sheet.getFilter();
+    if (filtro) filtro.remove();
+    sheet.getRange(ctx.headerRow, 1, numDataRows + 1, lastCol).createFilter();
+  });
+
+  beautifyTry_('status', function () {
+    var regras = [];
+    var alvoCols = opts.marcoCols
+      ? opts.marcoCols.map(function (f) { return ctx.cols[f]; }).filter(Boolean)
+      : (ctx.cols[opts.statusCol] ? [ctx.cols[opts.statusCol]] : []);
+    alvoCols.forEach(function (col) {
+      var range = sheet.getRange(ctx.headerRow + 1, col, numDataRows, 1);
+      Object.keys(opts.statusCores).forEach(function (valor) {
+        regras.push(
+          SpreadsheetApp.newConditionalFormatRule()
+            .whenTextEqualTo(valor)
+            .setBackground(opts.statusCores[valor])
+            .setRanges([range])
+            .build(),
+        );
+      });
+    });
+    if (regras.length) sheet.setConditionalFormatRules(regras);
+  });
+
+  beautifyTry_('larguras', function () {
+    if (ctx.cols.nome) sheet.setColumnWidth(ctx.cols.nome, 230);
+    if (ctx.cols.paciente) sheet.setColumnWidth(ctx.cols.paciente, 230);
+    if (ctx.cols.cirurgia) sheet.setColumnWidth(ctx.cols.cirurgia, 300);
+    if (ctx.cols.obs) sheet.setColumnWidth(ctx.cols.obs, 320);
+  });
+
+  try {
+    ctx.ss.toast('Formatação OK — ' + ctx.ss.getName(), 'blue.', 4);
+  } catch (e) {}
+
+  return avisos.join('; ');
 }
 
 /* ================= Gemini ✨ ================= */
@@ -552,7 +621,9 @@ function onOpen() {
   try {
     SpreadsheetApp.getUi()
       .createMenu('blue.')
-      .addItem('🎨 Embelezar planilhas (só formatação)', 'beautifySheets')
+      .addItem('🎨 Embelezar as 2 planilhas', 'beautifySheets')
+      .addItem('🎨 Só Recall', 'beautifyRecallOnly')
+      .addItem('🎨 Só Cirurgias', 'beautifyCirurgiasOnly')
       .addItem('🔁 Instalar sync automático', 'installTriggers')
       .addToUi();
   } catch (e) {}
