@@ -11,6 +11,8 @@ const COUNTRY_CODES = [
   { code: '33', minLen: 9, maxLen: 9, name: 'FR' },
   { code: '39', minLen: 9, maxLen: 10, name: 'IT' },
   { code: '351', minLen: 9, maxLen: 9, name: 'PT' },
+  { code: '420', minLen: 9, maxLen: 9, name: 'CZ' },
+  { code: '31', minLen: 9, maxLen: 9, name: 'NL' },
   { code: '54', minLen: 10, maxLen: 11, name: 'AR' },
   { code: '55', minLen: 10, maxLen: 11, name: 'BR' },
   { code: '56', minLen: 9, maxLen: 9, name: 'CL' },
@@ -48,6 +50,9 @@ function parseBrazilLocal(digits) {
   if (local.length === 10 || local.length === 11) {
     const ddd = local.slice(0, 2);
     const number = local.slice(2);
+    // celular BR de 11 dígitos começa com 9 após o DDD — "1 (770) 655-6389"
+    // (EUA sem +) cai aqui e precisa seguir para a detecção internacional
+    if (local.length === 11 && number[0] !== '9') return null;
     return { countryCode: '55', ddd, number, country: 'BR' };
   }
   if (local.length === 8 || local.length === 9) {

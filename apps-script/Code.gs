@@ -1,139 +1,339 @@
 /**
- * Blue Central — Google Apps Script
- * Planilha espelhada: o que a Helen edita aqui aparece no sistema e vice-versa.
+ * blue. Central — Google Apps Script (dual-sheet)
+ *
+ * Sincroniza o app da Helen com as DUAS planilhas reais:
+ *   Recall    — "GESTÃO DE RECALL — PACIENTES"  (cabeçalho linha 5, dados linha 6+)
+ *   Cirurgias — "Cirurgias BLUE (controle Helen)" (cabeçalho linha 1, dados linha 2+)
  *
  * Setup (uma vez):
- * 1. Script Properties: SHEETS_API_SECRET, GEMINI_API_KEY
- * 2. Executar setupSheet() e installTriggers()
- * 3. Deploy Web App → Anyone
+ * 1. Extensões → Apps Script em QUALQUER uma das planilhas (ou script standalone)
+ * 2. Configurações do projeto → Propriedades do script:
+ *      SHEETS_API_SECRET  = senha longa (mesma usada no app)
+ *      GEMINI_API_KEY     = chave do Google AI Studio (para ✨ Resumir)
+ *      RECALL_SHEET_ID    = 1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU
+ *      CIRURGIAS_SHEET_ID = 1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI
+ * 3. Executar installTriggers() e beautifySheets() no editor (autorizar)
+ * 4. Implantar → Nova implantação → App da Web → Executar como: Eu · Acesso: Qualquer pessoa
+ *
+ * beautifySheets() aplica SÓ formatação (cores, freeze, filtros) — nunca altera valores.
  */
 
-const SHEET_NAME = 'Pacientes';
-const META_SHEET = '_SyncMeta';
-const API_SECRET_PROP = 'SHEETS_API_SECRET';
-const GEMINI_KEY_PROP = 'GEMINI_API_KEY';
+var PROPS = PropertiesService.getScriptProperties();
+var CACHE = CacheService.getScriptCache();
 
-/** Colunas simples — fáceis de preencher no Sheets (como uma planilha normal) */
-const HEADERS = [
-  'id', 'nome', 'telefone', 'procedimento', 'data_cirurgia', 'fase',
-  'observacoes', 'status_recall', 'proxima_acao', 'ultimo_contato', 'notion',
-  'marco_7d', 'marco_1m', 'marco_3m', 'marco_6m', 'marco_1a',
-  'exames_pendentes', 'modifiedAt', 'deleted',
+var META_SHEET = '_SyncMeta';
+var CONFIG_SHEET = '_Config';
+
+/** colunas canônicas ↔ cabeçalhos reais (tolerante a acentos/quebras de linha) */
+var RECALL_FIELDS = [
+  { field: 'nome', match: 'PACIENTE' },
+  { field: 'contato', match: 'CONTATO' },
+  { field: 'ultimaConsulta', match: 'ULTIMA' },
+  { field: 'dataAgendada', match: 'AGENDADA' },
+  { field: 'status', match: 'STATUS' },
+  { field: 'motivoRecusa', match: 'MOTIVO' },
+  { field: 'dataContato', match: 'DATA DO CONTATO' },
+  { field: 'proximoContato', match: 'PROXIMO' },
+  { field: 'obs', match: 'OBSERVA' },
 ];
 
-const HEADER_LABELS = [
-  'ID', 'Nome', 'Telefone', 'Procedimento', 'Data Cirurgia', 'Fase',
-  'Observações', 'Status Recall', 'Próxima Ação', 'Último Contato', 'Notion',
-  '7 dias', '1 mês', '3 meses', '6 meses', '1 ano',
-  'Exames Pendentes', 'Atualizado em', 'Excluída',
+var CIRURGIAS_FIELDS = [
+  { field: 'data', match: 'DATA' },
+  { field: 'paciente', match: 'PACIENTE' },
+  { field: 'cirurgia', match: 'CIRURGIA' },
+  { field: 'hospital', match: 'HOSPITAL' },
+  { field: 'm3m', match: '03 MESES' },
+  { field: 'm6m', match: '06 MESES' },
+  { field: 'm1a', match: '01 ANO' },
 ];
 
-function getSecret_() {
-  return PropertiesService.getScriptProperties().getProperty(API_SECRET_PROP) || '';
+/* ================= util ================= */
+
+function norm_(s) {
+  return String(s || '')
+    .toUpperCase()
+    .replace(/[\n\r]/g, ' ')
+    .replace(/[ÁÀÂÃ]/g, 'A')
+    .replace(/[ÉÊ]/g, 'E')
+    .replace(/[Í]/g, 'I')
+    .replace(/[ÓÔÕ]/g, 'O')
+    .replace(/[Ú]/g, 'U')
+    .replace(/[Ç]/g, 'C')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function getGeminiKey_() {
-  return PropertiesService.getScriptProperties().getProperty(GEMINI_KEY_PROP) || '';
+function jsonResponse_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function validateSecret_(secret) {
-  if (!getSecret_() || secret !== getSecret_()) throw new Error('Unauthorized');
+  var real = PROPS.getProperty('SHEETS_API_SECRET') || '';
+  if (!real || secret !== real) throw new Error('Unauthorized');
 }
 
-function getSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-    setupSheet_();
+function nowISO_() {
+  return new Date().toISOString();
+}
+
+/* ================= acesso às planilhas ================= */
+
+function getSpreadsheet_(kind) {
+  var prop = kind === 'recall' ? 'RECALL_SHEET_ID' : 'CIRURGIAS_SHEET_ID';
+  var id = PROPS.getProperty(prop);
+  if (!id) throw new Error('Script Property ' + prop + ' não configurada');
+  return SpreadsheetApp.openById(id);
+}
+
+/** localiza a aba de dados e a linha de cabeçalho (Recall: linha 5 · Cirurgias: linha 1) */
+function findDataSheet_(ss, kind) {
+  var alvo = kind === 'recall' ? 'PACIENTE' : 'PACIENTE';
+  var sheets = ss.getSheets();
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    var nome = sheet.getName();
+    if (nome === META_SHEET || nome === CONFIG_SHEET) continue;
+    var max = Math.min(10, sheet.getLastRow());
+    if (max < 1) continue;
+    var valores = sheet.getRange(1, 1, max, Math.min(12, Math.max(1, sheet.getLastColumn()))).getDisplayValues();
+    for (var r = 0; r < valores.length; r++) {
+      for (var c = 0; c < valores[r].length; c++) {
+        if (norm_(valores[r][c]).indexOf(alvo) >= 0) {
+          return { sheet: sheet, headerRow: r + 1 };
+        }
+      }
+    }
   }
-  return sheet;
+  return { sheet: ss.getSheets()[0], headerRow: kind === 'recall' ? 5 : 1 };
 }
 
-function setupSheet_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME)
-    || SpreadsheetApp.getActiveSpreadsheet().insertSheet(SHEET_NAME);
-  sheet.clear();
-  sheet.getRange(1, 1, 1, HEADER_LABELS.length).setValues([HEADER_LABELS]);
-  sheet.getRange(1, 1, 1, HEADER_LABELS.length)
-    .setFontWeight('bold')
-    .setBackground('#EAEFF5')
-    .setFontFamily('Montserrat');
-  sheet.setFrozenRows(1);
-  sheet.setColumnWidth(2, 180);
-  sheet.setColumnWidth(3, 140);
-  sheet.setColumnWidth(7, 220);
-  SpreadsheetApp.getActiveSpreadsheet().toast('Planilha Blue Central pronta — preencha a partir da linha 2', 'blue.', 5);
+/** mapa field → coluna (1-based) a partir do cabeçalho real */
+function mapColumns_(sheet, headerRow, fields) {
+  var lastCol = Math.max(1, sheet.getLastColumn());
+  var headers = sheet.getRange(headerRow, 1, 1, lastCol).getDisplayValues()[0].map(norm_);
+  var mapa = {};
+  fields.forEach(function (f) {
+    for (var c = 0; c < headers.length; c++) {
+      var h = headers[c];
+      if (!h) continue;
+      var usado = Object.keys(mapa).some(function (k) { return mapa[k] === c + 1; });
+      if (!usado && h.indexOf(f.match) >= 0) {
+        mapa[f.field] = c + 1;
+        break;
+      }
+    }
+  });
+  return mapa;
 }
 
-function setupSheet() { setupSheet_(); }
+function getSheetContext_(kind) {
+  var ss = getSpreadsheet_(kind);
+  var found = findDataSheet_(ss, kind);
+  var fields = kind === 'recall' ? RECALL_FIELDS : CIRURGIAS_FIELDS;
+  var cols = mapColumns_(found.sheet, found.headerRow, fields);
+  if (kind === 'cirurgias') {
+    // Helen pode renomear os cabeçalhos dos marcos — fallback posicional (colunas 5/6/7)
+    var lastCol = found.sheet.getLastColumn();
+    [['m3m', 5], ['m6m', 6], ['m1a', 7]].forEach(function (par) {
+      if (!cols[par[0]] && lastCol >= par[1]) cols[par[0]] = par[1];
+    });
+  }
+  return {
+    kind: kind,
+    ss: ss,
+    sheet: found.sheet,
+    headerRow: found.headerRow,
+    cols: cols,
+    fields: fields,
+  };
+}
 
-function getMetaSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(META_SHEET);
+/* ================= meta / lastChange ================= */
+
+function getMetaSheet_(ss) {
+  var sheet = ss.getSheetByName(META_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(META_SHEET);
     sheet.hideSheet();
-    sheet.getRange(1, 1, 2, 2).setValues([['key', 'value'], ['lastChange', '1970-01-01T00:00:00.000Z']]);
+    sheet.getRange(1, 1, 2, 2).setValues([
+      ['lastChange', '1970-01-01T00:00:00.000Z'],
+      ['rowMeta', '{}'],
+    ]);
   }
   return sheet;
 }
 
-function setLastChange_() {
-  getMetaSheet_().getRange(2, 2).setValue(new Date().toISOString());
-}
-
-function rowToObject_(row) {
-  const obj = {};
-  HEADERS.forEach((h, i) => { obj[h] = row[i] != null ? String(row[i]) : ''; });
-  return obj;
-}
-
-function findRowById_(sheet, id) {
-  if (!id) return -1;
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(id)) return i + 1;
+function bumpLastChange_(ss, rows) {
+  var meta = getMetaSheet_(ss);
+  var agora = nowISO_();
+  meta.getRange(1, 2).setValue(agora);
+  if (rows && rows.length) {
+    var rowMeta = {};
+    try { rowMeta = JSON.parse(meta.getRange(2, 2).getValue() || '{}'); } catch (e) {}
+    rows.forEach(function (r) { rowMeta[r] = agora; });
+    meta.getRange(2, 2).setValue(JSON.stringify(rowMeta));
   }
-  return -1;
+  CACHE.put('lastChange', agora, 21600);
+  return agora;
 }
 
-function findRowByNome_(sheet, nome) {
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][1]).toLowerCase() === String(nome).toLowerCase()) return i + 1;
+function getRowMeta_(ss) {
+  try {
+    return JSON.parse(getMetaSheet_(ss).getRange(2, 2).getValue() || '{}');
+  } catch (e) {
+    return {};
   }
-  return -1;
 }
 
-function objectToRow_(obj) {
-  return HEADERS.map(h => obj[h] != null ? obj[h] : '');
+/** lastChange global (as duas planilhas + config) — via cache para polls baratos */
+function getLastChange_() {
+  var cached = CACHE.get('lastChange');
+  if (cached) return cached;
+  var valores = ['recall', 'cirurgias'].map(function (kind) {
+    return String(getMetaSheet_(getSpreadsheet_(kind)).getRange(1, 2).getValue() || '');
+  });
+  var lc = valores.sort().pop() || '1970-01-01T00:00:00.000Z';
+  CACHE.put('lastChange', lc, 21600);
+  return lc;
 }
 
-function newId_() {
-  return 'p' + new Date().getTime().toString(36) + Math.random().toString(36).slice(2, 5);
+/* ================= leitura ================= */
+
+function pullRows_(ctx) {
+  var sheet = ctx.sheet;
+  var inicio = ctx.headerRow + 1;
+  var lastRow = sheet.getLastRow();
+  if (lastRow < inicio) return [];
+
+  var lastCol = Math.max(1, sheet.getLastColumn());
+  var valores = sheet.getRange(inicio, 1, lastRow - inicio + 1, lastCol).getDisplayValues();
+  var rowMeta = getRowMeta_(ctx.ss);
+  var rows = [];
+
+  for (var i = 0; i < valores.length; i++) {
+    var numero = inicio + i;
+    var obj = { row: numero, modifiedAt: rowMeta[numero] || '' };
+    var vazia = true;
+    ctx.fields.forEach(function (f) {
+      var col = ctx.cols[f.field];
+      var v = col ? String(valores[i][col - 1] || '') : '';
+      obj[f.field] = v;
+      if (v) vazia = false;
+    });
+    if (!vazia) rows.push(obj);
+  }
+  return rows;
 }
+
+function buildPayload_() {
+  var recall = getSheetContext_('recall');
+  var cirurgias = getSheetContext_('cirurgias');
+  return {
+    ok: true,
+    changed: true,
+    lastChange: getLastChange_(),
+    recall: { titulo: recall.ss.getName(), headerRow: recall.headerRow, rows: pullRows_(recall) },
+    cirurgias: { titulo: cirurgias.ss.getName(), headerRow: cirurgias.headerRow, rows: pullRows_(cirurgias) },
+    appConfig: getAppConfig_(),
+  };
+}
+
+/* ================= _Config (templates de acompanhamento) ================= */
+
+function getConfigSheet_() {
+  var ss = getSpreadsheet_('cirurgias');
+  var sheet = ss.getSheetByName(CONFIG_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG_SHEET);
+    sheet.hideSheet();
+    sheet.getRange(1, 1, 2, 2).setValues([
+      ['appConfig', '{}'],
+      ['modifiedAt', ''],
+    ]);
+  }
+  return sheet;
+}
+
+function getAppConfig_() {
+  try {
+    var sheet = getConfigSheet_();
+    var json = JSON.parse(sheet.getRange(1, 2).getValue() || '{}');
+    json.modifiedAt = json.modifiedAt || String(sheet.getRange(2, 2).getValue() || '');
+    return json;
+  } catch (e) {
+    return {};
+  }
+}
+
+function setAppConfig_(appConfig) {
+  var sheet = getConfigSheet_();
+  appConfig = appConfig || {};
+  appConfig.modifiedAt = appConfig.modifiedAt || nowISO_();
+  sheet.getRange(1, 2).setValue(JSON.stringify(appConfig));
+  sheet.getRange(2, 2).setValue(appConfig.modifiedAt);
+  bumpLastChange_(getSpreadsheet_('cirurgias'), null);
+  return { saved: true };
+}
+
+/* ================= escrita ================= */
+
+function applyEdit_(op) {
+  var ctx = getSheetContext_(op.sheet);
+  var col = ctx.cols[op.field];
+  if (!col) return { key: op.key, error: 'coluna desconhecida: ' + op.field };
+  var row = Number(op.row);
+  if (!row || row <= ctx.headerRow) return { key: op.key, error: 'linha inválida' };
+
+  // conflito por modifiedAt: se a planilha foi editada DEPOIS da edição do app, planilha vence
+  var rowMeta = getRowMeta_(ctx.ss);
+  if (op.ts && rowMeta[row] && rowMeta[row] > op.ts) {
+    return { key: op.key, skipped: true, reason: 'conflict' };
+  }
+
+  ctx.sheet.getRange(row, col).setValue(op.value);
+  bumpLastChange_(ctx.ss, [row]);
+  return { key: op.key, updated: true };
+}
+
+function applyAppend_(op) {
+  var ctx = getSheetContext_(op.sheet);
+  var row = Math.max(ctx.sheet.getLastRow() + 1, ctx.headerRow + 1);
+  var lastCol = Math.max(1, ctx.sheet.getLastColumn());
+  var linha = new Array(lastCol).fill('');
+  ctx.fields.forEach(function (f) {
+    var col = ctx.cols[f.field];
+    if (col && op.cells && op.cells[f.field] != null) linha[col - 1] = op.cells[f.field];
+  });
+  ctx.sheet.getRange(row, 1, 1, lastCol).setValues([linha]);
+  bumpLastChange_(ctx.ss, [row]);
+  return { key: op.key, appendedRow: row };
+}
+
+/* ================= web app ================= */
 
 function doGet(e) {
   try {
-    const action = e.parameter.action || 'health';
-    validateSecret_(e.parameter.secret || '');
+    var action = (e && e.parameter && e.parameter.action) || 'health';
+    validateSecret_((e && e.parameter && e.parameter.secret) || '');
 
     if (action === 'health') {
-      return jsonResponse_({ ok: true, service: 'blue-central', sheet: SHEET_NAME });
-    }
-    if (action === 'sync') {
-      const since = e.parameter.since || '1970-01-01T00:00:00.000Z';
-      return jsonResponse_({ ok: true, records: pullRecords_(since) });
+      return jsonResponse_({
+        ok: true,
+        service: 'blue-central-dual',
+        recall: getSpreadsheet_('recall').getName(),
+        cirurgias: getSpreadsheet_('cirurgias').getName(),
+      });
     }
     if (action === 'fullSync') {
-      return jsonResponse_({ ok: true, records: pullRecords_('1970-01-01T00:00:00.000Z', true) });
+      return jsonResponse_(buildPayload_());
     }
-    if (action === 'summarize') {
-      const id = e.parameter.id;
-      const record = getRecordById_(id);
-      if (!record) throw new Error('Paciente não encontrada');
-      return jsonResponse_({ ok: true, summary: geminiSummarize_(record) });
+    if (action === 'sync') {
+      var since = e.parameter.since || '';
+      var lc = getLastChange_();
+      if (since && lc <= since) {
+        return jsonResponse_({ ok: true, changed: false, lastChange: lc });
+      }
+      return jsonResponse_(buildPayload_());
     }
     throw new Error('Unknown action: ' + action);
   } catch (err) {
@@ -142,219 +342,201 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
   try {
-    const body = JSON.parse(e.postData.contents);
+    lock.waitLock(20000);
+    var body = JSON.parse(e.postData.contents);
     validateSecret_(body.secret || '');
-    let result;
 
-    switch (body.action) {
-      case 'createRecord': result = createRecord(body.record); break;
-      case 'updateRecord': result = updateRecord(body.record); break;
-      case 'deleteRecord': result = deleteRecord(body.id); break;
-      case 'syncRecord': result = syncRecord({ record: body.record }); break;
-      case 'batchSync': result = batchSync_(body.records || []); break;
-      case 'summarize':
-        result = geminiSummarize_(body.record || getRecordById_(body.id));
-        break;
-      default: throw new Error('Unknown action: ' + body.action);
+    if (body.action === 'push') {
+      var results = (body.ops || []).map(function (op) {
+        try {
+          if (op.type === 'edit') return applyEdit_(op);
+          if (op.type === 'append') return applyAppend_(op);
+          if (op.type === 'config') return setAppConfig_(op.appConfig);
+          return { error: 'op desconhecida: ' + op.type };
+        } catch (err) {
+          return { key: op.key, error: err.message };
+        }
+      });
+      return jsonResponse_({ ok: true, results: results, lastChange: getLastChange_() });
     }
-
-    setLastChange_();
-    return jsonResponse_({ ok: true, result: result, summary: result.text || undefined });
+    if (body.action === 'setConfig') {
+      return jsonResponse_({ ok: true, result: setAppConfig_(body.appConfig) });
+    }
+    if (body.action === 'summarize') {
+      return jsonResponse_({ ok: true, summary: geminiSummarize_(body.record) });
+    }
+    throw new Error('Unknown action: ' + body.action);
   } catch (err) {
     return jsonResponse_({ error: err.message });
+  } finally {
+    try { lock.releaseLock(); } catch (_) {}
   }
 }
 
-function getRecordById_(id) {
-  const sheet = getSheet_();
-  const row = findRowById_(sheet, id);
-  if (row < 0) return null;
-  return rowToObject_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
+/* ================= triggers (edições manuais no Sheets) ================= */
+
+function onSheetEdit(e) {
+  if (!e || !e.range) return;
+  var sheet = e.range.getSheet();
+  var nome = sheet.getName();
+  if (nome === META_SHEET || nome === CONFIG_SHEET) return;
+  var linhas = [];
+  for (var r = e.range.getRow(); r <= e.range.getLastRow(); r++) linhas.push(r);
+  bumpLastChange_(e.source, linhas);
 }
 
-function pullRecords_(since, includeDeleted) {
-  const sheet = getSheet_();
-  const sinceTime = new Date(since).getTime();
-  const data = sheet.getDataRange().getValues();
-  const records = [];
-
-  for (let i = 1; i < data.length; i++) {
-    const obj = rowToObject_(data[i]);
-    if (!obj.nome && !obj.id) continue;
-    if (!obj.id && obj.nome) {
-      obj.id = newId_();
-      sheet.getRange(i + 1, 1).setValue(obj.id);
+function installTriggers() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'onSheetEdit' || t.getHandlerFunction() === 'onEdit') {
+      ScriptApp.deleteTrigger(t);
     }
-    if (!includeDeleted && (obj.deleted === 'TRUE' || obj.deleted === 'true')) continue;
-    const mod = new Date(obj.modifiedAt || 0).getTime();
-    if (mod >= sinceTime || since === '1970-01-01T00:00:00.000Z') records.push(obj);
-  }
-  return records;
-}
-
-function createRecord(record) {
-  if (!record) throw new Error('Record required');
-  if (!record.id) record.id = newId_();
-  const sheet = getSheet_();
-  if (findRowById_(sheet, record.id) > 0) return updateRecord(record);
-
-  record.modifiedAt = record.modifiedAt || new Date().toISOString();
-  record.deleted = record.deleted || 'FALSE';
-  sheet.appendRow(objectToRow_(record));
-  return { id: record.id, created: true };
-}
-
-function updateRecord(record) {
-  if (!record || !record.id) throw new Error('Record id required');
-  const sheet = getSheet_();
-  let row = findRowById_(sheet, record.id);
-  if (row < 0 && record.nome) row = findRowByNome_(sheet, record.nome);
-  if (row < 0) return createRecord(record);
-
-  const existing = rowToObject_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
-  const existingTime = new Date(existing.modifiedAt || 0).getTime();
-  const incomingTime = new Date(record.modifiedAt || 0).getTime();
-  if (incomingTime < existingTime) {
-    return { id: record.id, skipped: true, reason: 'conflict' };
-  }
-
-  record.modifiedAt = record.modifiedAt || new Date().toISOString();
-  sheet.getRange(row, 1, 1, HEADERS.length).setValues([objectToRow_(record)]);
-  return { id: record.id, updated: true };
-}
-
-function deleteRecord(id) {
-  const sheet = getSheet_();
-  const row = findRowById_(sheet, id);
-  if (row < 0) return { id: id, deleted: false };
-  const record = rowToObject_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
-  record.deleted = 'TRUE';
-  record.modifiedAt = new Date().toISOString();
-  sheet.getRange(row, 1, 1, HEADERS.length).setValues([objectToRow_(record)]);
-  return { id: id, deleted: true };
-}
-
-function syncRecord(opts) {
-  opts = opts || {};
-  if (opts.pullOnly) return pullRecords_(opts.since || '1970-01-01T00:00:00.000Z');
-  if (opts.record) {
-    if (opts.record.deleted === 'TRUE' || opts.record.deleted === true) return deleteRecord(opts.record.id);
-    const sheet = getSheet_();
-    const row = findRowById_(sheet, opts.record.id);
-    return row > 0 ? updateRecord(opts.record) : createRecord(opts.record);
-  }
-  return { ok: true };
-}
-
-function batchSync_(records) {
-  return records.map(r => {
-    try { return syncRecord({ record: r }); }
-    catch (e) { return { id: r.id, error: e.message }; }
+  });
+  ['recall', 'cirurgias'].forEach(function (kind) {
+    ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(getSpreadsheet_(kind)).onEdit().create();
   });
 }
 
-/** Gemini — mesmo estilo do resumo do Google Sheets */
+/* ================= beautify — SÓ formatação, nunca valores ================= */
+
+function beautifySheets() {
+  beautifyOne_(getSheetContext_('recall'), {
+    header: '#4A6484',
+    headerFont: '#FFFFFF',
+    banda: '#F4F1EB',
+    statusCol: 'status',
+    statusCores: {
+      'Agendado': '#EDF3EF',
+      'Pendente': '#F8F0E4',
+      'Sem Resposta': '#F6E9E6',
+      'Em Acompanhamento': '#EAEFF5',
+      'Não agendou': '#F1F0EC',
+      'Sem interesse': '#F1F0EC',
+    },
+  });
+  beautifyOne_(getSheetContext_('cirurgias'), {
+    header: '#4A6484',
+    headerFont: '#FFFFFF',
+    banda: '#F4F1EB',
+    statusCol: null,
+    marcoCols: ['m3m', 'm6m', 'm1a'],
+    statusCores: {
+      'Realizada': '#EDF3EF',
+      'Marcada': '#EAEFF5',
+      'Pendente': '#F8F0E4',
+      'Sem resposta': '#F6E9E6',
+    },
+  });
+}
+
+function beautifyOne_(ctx, opts) {
+  var sheet = ctx.sheet;
+  var lastRow = Math.max(sheet.getLastRow(), ctx.headerRow + 1);
+  var lastCol = Math.max(1, sheet.getLastColumn());
+
+  var header = sheet.getRange(ctx.headerRow, 1, 1, lastCol);
+  header
+    .setFontWeight('bold')
+    .setFontFamily('Montserrat')
+    .setBackground(opts.header)
+    .setFontColor(opts.headerFont)
+    .setVerticalAlignment('middle');
+  sheet.setFrozenRows(ctx.headerRow);
+
+  var dados = sheet.getRange(ctx.headerRow + 1, 1, lastRow - ctx.headerRow, lastCol);
+  dados.setFontFamily('Montserrat').setVerticalAlignment('middle');
+
+  // filtro nativo no cabeçalho
+  var filtro = sheet.getFilter();
+  if (filtro) filtro.remove();
+  sheet.getRange(ctx.headerRow, 1, lastRow - ctx.headerRow + 1, lastCol).createFilter();
+
+  // cores por status (formatação condicional — não altera valores)
+  var regras = [];
+  var alvoCols = opts.marcoCols
+    ? opts.marcoCols.map(function (f) { return ctx.cols[f]; }).filter(Boolean)
+    : (ctx.cols[opts.statusCol] ? [ctx.cols[opts.statusCol]] : []);
+  alvoCols.forEach(function (col) {
+    var range = sheet.getRange(ctx.headerRow + 1, col, lastRow - ctx.headerRow, 1);
+    Object.keys(opts.statusCores).forEach(function (valor) {
+      regras.push(
+        SpreadsheetApp.newConditionalFormatRule()
+          .whenTextEqualTo(valor)
+          .setBackground(opts.statusCores[valor])
+          .setRanges([range])
+          .build(),
+      );
+    });
+  });
+  if (regras.length) sheet.setConditionalFormatRules(regras);
+
+  if (ctx.cols.nome) sheet.setColumnWidth(ctx.cols.nome, 230);
+  if (ctx.cols.paciente) sheet.setColumnWidth(ctx.cols.paciente, 230);
+  if (ctx.cols.cirurgia) sheet.setColumnWidth(ctx.cols.cirurgia, 300);
+  if (ctx.cols.obs) sheet.setColumnWidth(ctx.cols.obs, 320);
+
+  ctx.ss.toast('Formatação aplicada — valores intocados', 'blue.', 4);
+}
+
+/* ================= Gemini ✨ ================= */
+
 function geminiSummarize_(record) {
-  const key = getGeminiKey_();
-  const data = typeof record === 'object' ? record : getRecordById_(record);
-  if (!data) throw new Error('Sem dados da paciente');
+  var key = PROPS.getProperty('GEMINI_API_KEY') || '';
+  if (!record) throw new Error('Sem dados da paciente');
 
-  if (!key) {
-    return { text: buildLocalSummary_(data), provider: 'local' };
-  }
+  if (!key) return { text: buildLocalSummary_(record), provider: 'local' };
 
-  const prompt =
-    'Você é a assistente de uma concierge de cirurgia plástica (blue.). ' +
-    'Gere um resumo claro em português brasileiro, no estilo Gemini do Google Sheets, com estas seções:\n\n' +
-    'Resumo da Paciente\n• Nome\n• Procedimento\n• Status\n• Pendências\n• Próximo passo\n• Observações importantes\n\n' +
-    'Dados:\n' + JSON.stringify(data, null, 2);
+  var prompt =
+    'Você é a assistente da Helen, concierge médica da clínica blue. (cirurgia plástica, Dr. Rafael). ' +
+    'Gere um resumo claro em português brasileiro com estas seções:\n\n' +
+    'Resumo da Paciente\n• Nome\n• Procedimento / Cirurgia\n• Situação do recall\n• Retornos (marcos)\n• Próximo passo sugerido\n• Observações importantes\n\n' +
+    'Dados (JSON):\n' + JSON.stringify(record, null, 2);
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key;
-  const res = UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.35, maxOutputTokens: 1024 },
-    }),
-    muteHttpExceptions: true,
-  });
+  var res = UrlFetchApp.fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.35, maxOutputTokens: 1024 },
+      }),
+      muteHttpExceptions: true,
+    },
+  );
 
-  const json = JSON.parse(res.getContentText());
+  var json = JSON.parse(res.getContentText());
   if (json.error) throw new Error(json.error.message || 'Erro Gemini');
-  const text = json.candidates && json.candidates[0] && json.candidates[0].content.parts[0].text;
-  if (!text) throw new Error('Resposta vazia');
-  return { text: text.trim(), provider: 'gemini-sheets' };
+  var text = json.candidates && json.candidates[0] && json.candidates[0].content.parts[0].text;
+  if (!text) throw new Error('Resposta vazia do Gemini');
+  return { text: text.trim(), provider: 'gemini' };
 }
 
 function buildLocalSummary_(r) {
   return [
     'Resumo da Paciente', '',
     '• Nome: ' + (r.nome || '—'),
-    '• Procedimento: ' + (r.procedimento || '—'),
-    '• Status: ' + (r.fase || '—') + (r.status_recall ? ' · Recall: ' + r.status_recall : ''),
-    '• Pendências: ' + (r.exames_pendentes || '—'),
-    '• Próximo passo: ' + (r.proxima_acao || '—'),
-    '• Observações importantes: ' + (r.observacoes || '—'),
+    '• Procedimento / Cirurgia: ' + (r.cirurgia || r.ultimaConsulta || '—'),
+    '• Situação do recall: ' + (r.statusRecall || '—'),
+    '• Retornos: ' + (r.marcos || '—'),
+    '• Próximo passo: ' + (r.proximoContato || '—'),
+    '• Observações importantes: ' + (r.obs || '—'),
   ].join('\n');
 }
 
-function onEdit(e) {
-  if (!e || !e.range) return;
-  const sheet = e.range.getSheet();
-  if (sheet.getName() !== SHEET_NAME) return;
-  const row = e.range.getRow();
-  if (row <= 1) return;
-
-  const idCol = 1;
-  const nomeCol = 2;
-  const modCol = HEADERS.indexOf('modifiedAt') + 1;
-  const id = sheet.getRange(row, idCol).getValue();
-  const nome = sheet.getRange(row, nomeCol).getValue();
-
-  if (nome && !id) {
-    sheet.getRange(row, idCol).setValue(newId_());
-  }
-  if (e.range.getColumn() !== modCol) {
-    sheet.getRange(row, modCol).setValue(new Date().toISOString());
-  }
-  setLastChange_();
-}
-
-function installTriggers() {
-  ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'onEdit') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('onEdit').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
-}
+/* ================= menu ================= */
 
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('blue.')
-    .addItem('✨ Resumir paciente selecionada', 'menuSummarizeSelection')
-    .addItem('Preparar planilha', 'setupSheet')
-    .addItem('Instalar sync automático', 'installTriggers')
-    .addToUi();
-}
-
-function menuSummarizeSelection() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  const row = sheet.getActiveCell().getRow();
-  if (row <= 1) return;
-  const record = rowToObject_(sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0]);
-  const result = geminiSummarize_(record);
-  SpreadsheetApp.getUi().alert('Resumo — ' + record.nome, result.text, SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function jsonResponse_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+  try {
+    SpreadsheetApp.getUi()
+      .createMenu('blue.')
+      .addItem('🎨 Embelezar planilhas (só formatação)', 'beautifySheets')
+      .addItem('🔁 Instalar sync automático', 'installTriggers')
+      .addToUi();
+  } catch (e) {}
 }
 
 function setupSecret() {
-  PropertiesService.getScriptProperties().setProperty(API_SECRET_PROP, Utilities.getUuid());
-}
-
-function setupGeminiKey() {
-  // Cole sua chave: PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', 'AIza...');
+  PROPS.setProperty('SHEETS_API_SECRET', Utilities.getUuid());
 }

@@ -18,17 +18,25 @@
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
         <span>hoje</span><em class="badge" id="badge-hoje"></em>
       </button>
+      <button data-tela="grid-recall">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
+        <span>planilha recall</span><em class="badge" id="badge-recall"></em>
+      </button>
+      <button data-tela="grid-cirurgias">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>
+        <span>planilha cirurgias</span><em class="badge" id="badge-cirurgias"></em>
+      </button>
       <button data-tela="retornos">
         <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
         <span>retornos</span><em class="badge" id="badge-retornos"></em>
       </button>
-      <button data-tela="recall">
-        <svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
-        <span>recall</span><em class="badge" id="badge-recall"></em>
-      </button>
       <button data-tela="preop">
         <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>
         <span>pré-op</span><em class="badge" id="badge-preop"></em>
+      </button>
+      <button data-tela="acompanhamentos">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>acompanhamentos</span>
       </button>
     </nav>
     <div class="sidebar-rodape">
@@ -36,21 +44,18 @@
         <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M4 19h16"/></svg>
         <span>exportar XLSX</span>
       </button>
-      <button class="nav-extra btn-fantasma btn" id="btn-abrir-planilha" type="button" style="display:none">
-        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/></svg>
-        <span>abrir Google Sheets</span>
+      <button class="nav-extra btn-fantasma btn" id="btn-config" type="button" title="Sync automático com as duas planilhas Google">
+        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9"/></svg>
+        <span>conectar planilhas</span>
       </button>
-      <button class="nav-extra btn-fantasma btn" id="btn-config" type="button" title="Sync automático com Google Sheets">
-        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        <span>conectar planilha</span>
-      </button>
-      <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>aguardando planilha</span></div>
-      <div class="atalho-k"><kbd>⌘</kbd><kbd>K</kbd> buscar paciente</div>
+      <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>aguardando planilhas</span></div>
+      <div class="atalho-k"><kbd>⌘</kbd><kbd>K</kbd> paciente · <kbd>⌘</kbd><kbd>F</kbd> na grade</div>
     </div>
   </aside>
 
   <main class="principal">
 
+    <!-- ============ HOJE ============ -->
     <section class="tela ativa" id="tela-hoje">
       <div class="cabecalho">
         <div>
@@ -58,60 +63,67 @@
           <div class="sub" id="data-hoje"></div>
         </div>
         <div class="acoes-cabecalho">
-          <button class="btn btn-azul" id="btn-nova-paciente" type="button">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> nova paciente
-          </button>
+          <button class="btn btn-claro" id="btn-hoje-recall" type="button">＋ paciente no recall</button>
+          <button class="btn btn-azul" id="btn-hoje-cirurgia" type="button">＋ nova cirurgia</button>
         </div>
       </div>
       <div class="grade-hoje" id="grade-hoje"></div>
     </section>
 
+    <!-- ============ PLANILHA RECALL ============ -->
+    <section class="tela" id="tela-grid-recall">
+      <div class="cabecalho">
+        <div>
+          <h1>planilha recall<span class="ponto">.</span></h1>
+          <div class="sub">GESTÃO DE RECALL — PACIENTES · edição direta, sincroniza com o Google Sheets</div>
+        </div>
+        <div class="acoes-cabecalho">
+          <button class="btn btn-claro" id="btn-alternar-cirurgias" type="button">
+            ⇄ planilha cirurgias
+          </button>
+          <button class="btn btn-fantasma" id="btn-abrir-recall" type="button" style="display:none">abrir no Google ↗</button>
+        </div>
+      </div>
+      <div id="grid-recall"></div>
+    </section>
+
+    <!-- ============ PLANILHA CIRURGIAS ============ -->
+    <section class="tela" id="tela-grid-cirurgias">
+      <div class="cabecalho">
+        <div>
+          <h1>planilha cirurgias<span class="ponto">.</span></h1>
+          <div class="sub">Cirurgias BLUE (controle Helen) · edição direta, sincroniza com o Google Sheets</div>
+        </div>
+        <div class="acoes-cabecalho">
+          <button class="btn btn-claro" id="btn-alternar-recall" type="button">
+            ⇄ planilha recall
+          </button>
+          <button class="btn btn-fantasma" id="btn-abrir-cirurgias" type="button" style="display:none">abrir no Google ↗</button>
+        </div>
+      </div>
+      <div id="grid-cirurgias"></div>
+    </section>
+
+    <!-- ============ RETORNOS ============ -->
     <section class="tela" id="tela-retornos">
       <div class="cabecalho">
         <div>
           <h1>retornos<span class="ponto">.</span></h1>
-          <div class="sub">acompanhamento pós-operatório — 7 dias, 1 mês, 3 meses, 6 meses e 1 ano</div>
-        </div>
-        <div class="acoes-cabecalho">
-          <button class="btn btn-azul" id="btn-nova-paciente-ret" type="button">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> nova paciente
-          </button>
+          <div class="sub" id="retornos-sub">acompanhamento pós-operatório — prazos configuráveis em ⚙ acompanhamentos</div>
         </div>
       </div>
       <div class="filtros" id="filtros-retornos"></div>
       <div class="cartao tabela-envolto">
         <table>
           <thead><tr>
-            <th>paciente</th><th>trilho pós-op</th><th>próximo marco</th><th>status</th><th></th>
+            <th>paciente</th><th>cirurgia</th><th>trilho pós-op</th><th>próximo marco</th><th>status</th><th></th>
           </tr></thead>
           <tbody id="corpo-retornos"></tbody>
         </table>
       </div>
     </section>
 
-    <section class="tela" id="tela-recall">
-      <div class="cabecalho">
-        <div>
-          <h1>recall<span class="ponto">.</span></h1>
-          <div class="sub">reativação e acompanhamento de contato com as pacientes</div>
-        </div>
-        <div class="acoes-cabecalho">
-          <button class="btn btn-claro" id="btn-importar-recall" type="button">
-            <svg viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/></svg> abrir planilha
-          </button>
-        </div>
-      </div>
-      <div class="filtros" id="filtros-recall"></div>
-      <div class="cartao tabela-envolto">
-        <table>
-          <thead><tr>
-            <th>paciente</th><th>último contato</th><th>tentativas</th><th>próxima ação</th><th>status</th><th></th>
-          </tr></thead>
-          <tbody id="corpo-recall"></tbody>
-        </table>
-      </div>
-    </section>
-
+    <!-- ============ PRÉ-OP ============ -->
     <section class="tela" id="tela-preop">
       <div class="cabecalho">
         <div>
@@ -119,46 +131,34 @@
           <div class="sub">exames e preparo das pacientes com cirurgia marcada</div>
         </div>
         <div class="acoes-cabecalho">
-          <button class="btn btn-azul" id="btn-nova-cirurgia" type="button">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> nova cirurgia
-          </button>
+          <button class="btn btn-azul" id="btn-nova-cirurgia" type="button">＋ nova cirurgia</button>
         </div>
       </div>
       <div class="grade-preop" id="grade-preop"></div>
     </section>
 
+    <!-- ============ ⚙ ACOMPANHAMENTOS ============ -->
+    <section class="tela" id="tela-acompanhamentos">
+      <div class="cabecalho">
+        <div>
+          <h1>acompanhamentos<span class="ponto">.</span></h1>
+          <div class="sub">prazos de retorno por procedimento — qualquer número de dias, qualquer número de marcos</div>
+        </div>
+      </div>
+      <div class="tpl-lista" id="acompanhamentos-lista"></div>
+    </section>
+
   </main>
 </div>
 
-<button type="button" class="fab-resumir" id="fab-resumir" title="Resumir paciente — estilo Gemini">✨ Resumir</button>
+<button type="button" class="fab-resumir" id="fab-resumir" title="Resumir paciente com Gemini">✨ Resumir</button>
 
-<div class="veu" id="veu-paciente">
-  <div class="modal">
-    <h3 id="titulo-paciente">nova paciente<span class="ponto">.</span></h3>
-    <div class="modal-sub">os retornos são calculados automaticamente a partir da data da cirurgia · auto-save ativo</div>
-    <div class="campo-grupo"><label>nome completo</label><input class="campo" id="p-nome" placeholder="ex.: Mariana Duarte" autocomplete="name"></div>
-    <div class="linha-campos">
-      <div class="campo-grupo"><label>telefone (whatsapp)</label><input class="campo" id="p-fone" placeholder="21 99999-0000 ou +5511999999999" inputmode="tel"><div id="fone-hint"></div></div>
-      <div class="campo-grupo"><label>procedimento</label><input class="campo" id="p-proc" placeholder="ex.: LipeDefinition"></div>
-    </div>
-    <div class="linha-campos">
-      <div class="campo-grupo"><label>data da cirurgia</label><input class="campo" type="date" id="p-data"></div>
-      <div class="campo-grupo"><label>situação</label>
-        <select class="campo" id="p-fase">
-          <option value="preop">pré-operatório (cirurgia marcada)</option>
-          <option value="posop">pós-operatório (já operou)</option>
-        </select>
-      </div>
-    </div>
-    <div class="campo-grupo"><label>link do cronograma no notion (opcional)</label><input class="campo" id="p-notion" placeholder="https://notion.so/..."></div>
-    <div class="campo-grupo"><label>observações</label><textarea class="campo" id="p-obs" rows="2" placeholder="anotações rápidas"></textarea></div>
-    <div class="modal-rodape">
-      <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-paciente').classList.remove('aberto')">cancelar</button>
-      <button class="btn btn-azul" id="btn-salvar-paciente" type="button">salvar paciente</button>
-    </div>
-  </div>
+<!-- ============ modal: ficha unificada ============ -->
+<div class="veu" id="veu-ficha">
+  <div class="modal ficha" id="conteudo-ficha"></div>
 </div>
 
+<!-- ============ modal: registrar contato (recall) ============ -->
 <div class="veu" id="veu-contato">
   <div class="modal">
     <h3>registrar contato<span class="ponto">.</span></h3>
@@ -171,27 +171,27 @@
       </div>
       <div class="campo-grupo"><label>resultado</label>
         <select class="campo" id="c-resultado">
-          <option>respondeu — vai agendar</option>
-          <option>respondeu — agendou</option>
-          <option>respondeu — sem interesse agora</option>
-          <option>não respondeu</option>
-          <option>caixa postal / número inválido</option>
+          <option value="Agendado">respondeu — agendou</option>
+          <option value="Em Acompanhamento">respondeu — em acompanhamento</option>
+          <option value="Não agendou">respondeu — não agendou</option>
+          <option value="Sem interesse">respondeu — sem interesse</option>
+          <option value="Sem Resposta">não respondeu</option>
         </select>
       </div>
     </div>
-    <div class="campo-grupo"><label>anotação</label><textarea class="campo" id="c-nota" rows="2" placeholder="o que foi conversado"></textarea></div>
-    <div class="campo-grupo"><label>próxima ação em</label><input class="campo" type="date" id="c-proxima"></div>
+    <div class="campo-grupo"><label>anotação (vai para OBSERVAÇÕES da planilha)</label><textarea class="campo" id="c-nota" rows="2" placeholder="o que foi conversado"></textarea></div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>data agendada (se agendou)</label><input class="campo" type="date" id="c-agendada"></div>
+      <div class="campo-grupo"><label>próximo contato em</label><input class="campo" type="date" id="c-proxima"></div>
+    </div>
     <div class="modal-rodape">
       <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-contato').classList.remove('aberto')">cancelar</button>
-      <button class="btn btn-azul" id="btn-salvar-contato" type="button">salvar registro</button>
+      <button class="btn btn-azul" id="btn-salvar-contato" type="button">salvar na planilha</button>
     </div>
   </div>
 </div>
 
-<div class="veu" id="veu-ficha">
-  <div class="modal ficha" id="conteudo-ficha"></div>
-</div>
-
+<!-- ============ modal: resumo ✨ ============ -->
 <div class="veu" id="veu-resumo">
   <div class="modal">
     <h3>✨ Resumo<span class="ponto">.</span></h3>
@@ -200,20 +200,22 @@
     <div class="modal-rodape">
       <button class="btn btn-claro" id="btn-resumo-copiar" type="button">copiar</button>
       <button class="btn btn-claro" id="btn-resumo-regenerar" type="button">regenerar</button>
-      <button class="btn btn-claro" id="btn-resumo-notas" type="button">inserir em notas</button>
+      <button class="btn btn-claro" id="btn-resumo-notas" type="button">inserir em observações</button>
       <button class="btn btn-azul" id="btn-resumo-fechar" type="button">fechar</button>
     </div>
   </div>
 </div>
 
+<!-- ============ modal: conectar planilhas ============ -->
 <div class="veu" id="veu-config">
   <div class="modal">
-    <h3>conectar planilha<span class="ponto">.</span></h3>
-    <div class="modal-sub">Sync <strong>automático</strong> — edite no Google Sheets ou aqui, espelha nos dois lados. Sem importar CSV.</div>
+    <h3>conectar planilhas<span class="ponto">.</span></h3>
+    <div class="modal-sub">Sync <strong>automático</strong> com as duas planilhas — edite aqui ou no Google, espelha nos dois lados. Sem importar CSV.</div>
     <div class="config-grid">
-      <div class="campo-grupo"><label>URL da planilha Google Sheets</label><input class="campo" id="cfg-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
       <div class="campo-grupo"><label>Web App URL (Apps Script → Implantar)</label><input class="campo" id="cfg-webapp" placeholder="https://script.google.com/macros/s/.../exec"></div>
-      <div class="campo-grupo"><label>API Secret (Script Properties)</label><input class="campo" id="cfg-secret" type="password" placeholder="SHEETS_API_SECRET"></div>
+      <div class="campo-grupo"><label>API Secret (Script Properties → SHEETS_API_SECRET)</label><input class="campo" id="cfg-secret" type="password"></div>
+      <div class="campo-grupo"><label>URL da planilha Recall (opcional — botão "abrir no Google")</label><input class="campo" id="cfg-url-recall" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
+      <div class="campo-grupo"><label>URL da planilha Cirurgias (opcional)</label><input class="campo" id="cfg-url-cirurgias" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
     </div>
     <div class="modal-rodape">
       <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-config').classList.remove('aberto')">cancelar</button>
@@ -222,27 +224,7 @@
   </div>
 </div>
 
-<div class="veu" id="veu-importar">
-  <div class="modal">
-    <h3>importar planilha<span class="ponto">.</span></h3>
-    <div class="modal-sub">no Google Sheets: arquivo → fazer download → valores separados por vírgula (.csv)</div>
-    <div class="campo-grupo"><label>tipo de planilha</label>
-      <select class="campo" id="imp-tipo">
-        <option value="recall">recall (pacientes para reativação)</option>
-        <option value="preop">pré-op / cirurgias marcadas</option>
-        <option value="posop">pós-op / retornos</option>
-      </select>
-    </div>
-    <div class="zona-solta" id="zona-solta">solte o arquivo .csv aqui ou clique para escolher</div>
-    <input type="file" id="arquivo-csv" accept=".csv,text/csv" style="display:none">
-    <div id="mapa-colunas" class="mapa-colunas"></div>
-    <div class="modal-rodape">
-      <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-importar').classList.remove('aberto')">cancelar</button>
-      <button class="btn btn-azul" id="btn-confirmar-import" style="display:none" type="button">importar</button>
-    </div>
-  </div>
-</div>
-
+<!-- ============ busca ⌘K ============ -->
 <div class="veu" id="veu-busca">
   <div class="modal busca-caixa">
     <input id="campo-busca" placeholder="buscar paciente pelo nome…" autocomplete="off">

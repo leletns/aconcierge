@@ -1,6 +1,15 @@
 import { retry } from '../utils/helpers.js';
-import { patientToSheetRow, sheetRowToPatient } from '../utils/patientModel.js';
 
+/**
+ * Cliente do Web App (apps-script/Code.gs) — protocolo dual-sheet.
+ *
+ * GET  action=health            → { ok, recall:{titulo}, cirurgias:{titulo} }
+ * GET  action=fullSync          → { ok, recall:{rows}, cirurgias:{rows}, appConfig, lastChange }
+ * GET  action=sync&since=ISO    → { ok, changed, ...idem quando changed }
+ * POST action=push  ops=[...]   → { ok, results:[{key,row,skipped?}], lastChange }
+ * POST action=setConfig         → { ok }
+ * POST action=summarize         → { ok, summary:{text,provider} }
+ */
 export class GoogleSheetsApi {
   constructor({ webAppUrl, apiSecret }) {
     this.webAppUrl = (webAppUrl || '').replace(/\/$/, '');
@@ -16,13 +25,14 @@ export class GoogleSheetsApi {
 
     return retry(async () => {
       let url = this.webAppUrl;
-      const opts = { method, headers: { 'Content-Type': 'application/json' }, redirect: 'follow' };
+      const opts = { method, redirect: 'follow' };
 
       if (method === 'GET') {
         const params = new URLSearchParams({ action, secret: this.apiSecret, ...payload });
         url = `${url}?${params.toString()}`;
       } else {
-        opts.method = 'POST';
+        // text/plain evita preflight CORS no Apps Script
+        opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
         opts.body = JSON.stringify({ action, secret: this.apiSecret, ...payload });
       }
 
@@ -39,31 +49,29 @@ export class GoogleSheetsApi {
     }, { attempts: 4, delayMs: 400 });
   }
 
-  async pullChanges(since) {
-    const data = await this.request('sync', { since: since || '1970-01-01T00:00:00.000Z' }, 'GET');
-    return (data.records || []).map(sheetRowToPatient).filter(Boolean);
-  }
-
-  async fullPull() {
-    const data = await this.request('fullSync', {}, 'GET');
-    return (data.records || []).map(sheetRowToPatient).filter(Boolean);
-  }
-
-  async pushBatch(records) {
-    return this.request('batchSync', { records: records.map(patientToSheetRow) });
-  }
-
-  async summarizePatient(patient) {
-    const data = await this.request('summarize', {
-      id: patient.id,
-      record: patientToSheetRow(patient),
-    });
-    if (data.summary) return data.summary;
-    if (data.result?.text) return data.result;
-    throw new Error('Sem resumo');
-  }
-
   async healthCheck() {
     return this.request('health', {}, 'GET');
+  }
+
+  async fullSync() {
+    return this.request('fullSync', {}, 'GET');
+  }
+
+  async syncSince(since) {
+    return this.request('sync', { since: since || '' }, 'GET');
+  }
+
+  async push(ops) {
+    return this.request('push', { ops });
+  }
+
+  async setConfig(appConfig) {
+    return this.request('setConfig', { appConfig });
+  }
+
+  async summarize(record) {
+    const data = await this.request('summarize', { record });
+    if (data.summary) return data.summary;
+    throw new Error('Sem resumo');
   }
 }
