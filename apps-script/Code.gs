@@ -405,6 +405,7 @@ function beautifySheets() {
     header: '#4A6484',
     headerFont: '#FFFFFF',
     banda: '#F4F1EB',
+    freezeCols: 1,
     statusCol: 'status',
     statusCores: {
       'Agendado': '#EDF3EF',
@@ -419,6 +420,7 @@ function beautifySheets() {
     header: '#4A6484',
     headerFont: '#FFFFFF',
     banda: '#F4F1EB',
+    freezeCols: 2,
     statusCol: null,
     marcoCols: ['m3m', 'm6m', 'm1a'],
     statusCores: {
@@ -435,6 +437,15 @@ function beautifyOne_(ctx, opts) {
   var lastRow = Math.max(sheet.getLastRow(), ctx.headerRow + 1);
   var lastCol = Math.max(1, sheet.getLastColumn());
 
+  // bloco de título acima do cabeçalho (Recall: "GESTÃO DE RECALL — PACIENTES")
+  if (ctx.headerRow > 1) {
+    sheet.getRange(1, 1, ctx.headerRow - 1, lastCol).setFontFamily('Montserrat').setBackground('#FDFCFA');
+    if (ctx.headerRow >= 4) {
+      sheet.getRange(2, 1, 1, lastCol).setFontSize(14).setFontWeight('bold').setFontColor('#4A6484');
+      sheet.getRange(3, 1, 1, lastCol).setFontSize(9).setFontStyle('italic').setFontColor('#6E7681');
+    }
+  }
+
   var header = sheet.getRange(ctx.headerRow, 1, 1, lastCol);
   header
     .setFontWeight('bold')
@@ -443,9 +454,19 @@ function beautifyOne_(ctx, opts) {
     .setFontColor(opts.headerFont)
     .setVerticalAlignment('middle');
   sheet.setFrozenRows(ctx.headerRow);
+  if (opts.freezeCols) sheet.setFrozenColumns(opts.freezeCols);
 
   var dados = sheet.getRange(ctx.headerRow + 1, 1, lastRow - ctx.headerRow, lastCol);
-  dados.setFontFamily('Montserrat').setVerticalAlignment('middle');
+  dados
+    .setFontFamily('Montserrat')
+    .setVerticalAlignment('middle')
+    .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+
+  // zebra creme/papel (formatação condicional de status tem prioridade sobre a banda)
+  sheet.getBandings().forEach(function (b) { b.remove(); });
+  var banda = dados.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, false, false);
+  banda.setFirstRowColor('#FDFCFA');
+  banda.setSecondRowColor(opts.banda);
 
   // filtro nativo no cabeçalho
   var filtro = sheet.getFilter();
