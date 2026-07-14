@@ -39,16 +39,30 @@ Se o Netlify publicar a **pasta raiz** sem build, você vê:
 
 ### 3. Variáveis de ambiente (opcional — sync Google)
 
+> ⚠️ **Segurança:** variáveis `VITE_*` entram no bundle JS **público** do site.
+> Se você colocar `VITE_SHEETS_API_SECRET` aqui, qualquer pessoa que descobrir a
+> URL do Netlify consegue ler e editar as planilhas via Web App.
+> **Recomendado:** deixe as variáveis de segredo em branco e configure a conexão
+> **dentro do app** (botão *conectar planilhas*) — fica salva só no navegador da
+> Helen (localStorage), não no site público.
+
+Se mesmo assim preferir pré-configurar (URL do site mantida privada):
+
 **Site settings → Environment variables:**
 
 | Variável | Valor |
 |----------|--------|
 | `VITE_SHEETS_WEBAPP_URL` | URL do Apps Script Web App |
-| `VITE_SHEETS_API_SECRET` | Senha do Script Properties |
-| `VITE_RECALL_SHEET_ID` | `1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU` |
-| `VITE_CIRURGIAS_SHEET_ID` | `1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI` |
+| `VITE_SHEETS_API_SECRET` | Senha do Script Properties (⚠️ vira público — ver acima) |
+| `VITE_SPREADSHEET_URL_RECALL` | URL da planilha Recall (botão "abrir no Google") |
+| `VITE_SPREADSHEET_URL_CIRURGIAS` | URL da planilha Cirurgias |
 
 Depois de salvar variáveis: **Deploys → Trigger deploy → Clear cache and deploy**.
+
+**Dica extra de segurança:** as duas planilhas estão compartilhadas como
+"qualquer pessoa com o link". O sync **não precisa disso** — o Apps Script roda
+como a sua conta Google. Pode restringir o compartilhamento das planilhas que o
+app continua funcionando normalmente.
 
 ### 4. Deploy
 

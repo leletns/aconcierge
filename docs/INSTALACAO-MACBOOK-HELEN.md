@@ -64,7 +64,15 @@ VITE_SPREADSHEET_URL_CIRURGIAS=https://docs.google.com/spreadsheets/d/1ZORqTbcRR
 
 Depois: `npm run build`
 
-### 4. Atalho "app" no Mac (Automator)
+### 4. Atalho "app" no Mac
+
+**Opção A — site no Netlify (mais simples, sem terminal):** se o app já está
+publicado (ver `docs/NETLIFY.md`), abra a URL no Chrome →
+menu ⋮ → **Transmitir, salvar e compartilhar → Criar atalho…** → marcar
+**Abrir como janela**. Vira um "app" com ícone próprio — arraste para o Dock.
+Pronto, pule para o passo 5.
+
+**Opção B — rodando local (Automator):**
 
 1. Abrir **Automator** → Novo → **Aplicativo**.
 2. Adicionar ação **Executar Script Shell**:
