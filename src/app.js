@@ -21,6 +21,7 @@ import { Store } from './services/store.js';
 import { SyncService } from './services/syncService.js';
 import { SummaryService, pacienteSnapshot } from './services/summaryService.js';
 import { exportToXlsx } from './services/exportService.js';
+import { buildLinkInstalacao } from './services/storage.js';
 import { showToast, showLoadingToast } from './components/Toast.js';
 import { renderSyncIndicator } from './components/SummaryModal.js';
 import { SpreadsheetGrid } from './components/SpreadsheetGrid.js';
@@ -698,6 +699,27 @@ function bindConfigModal() {
   $('#cfg-secret').value = store.config.apiSecret || '';
   $('#cfg-url-recall').value = store.config.recallSheetUrl || '';
   $('#cfg-url-cirurgias').value = store.config.cirurgiasSheetUrl || '';
+
+  $('#btn-link-magico')?.addEventListener('click', async () => {
+    const cfg = {
+      ...store.config,
+      webAppUrl: $('#cfg-webapp').value.trim() || store.config.webAppUrl,
+      apiSecret: $('#cfg-secret').value.trim() || store.config.apiSecret,
+      recallSheetUrl: $('#cfg-url-recall').value.trim() || store.config.recallSheetUrl,
+      cirurgiasSheetUrl: $('#cfg-url-cirurgias').value.trim() || store.config.cirurgiasSheetUrl,
+    };
+    const link = buildLinkInstalacao(cfg);
+    if (!link) {
+      showToast('preencha a URL do Web App e a senha primeiro');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast('link de instalação copiado — use como atalho no Mac da Helen');
+    } catch (_) {
+      prompt('Copie o link de instalação:', link);
+    }
+  });
 
   $('#btn-salvar-config')?.addEventListener('click', async () => {
     const btn = $('#btn-salvar-config');

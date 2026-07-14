@@ -434,3 +434,10 @@ table.grade td.celula.editando{padding:3px;background:var(--papel);box-shadow:in
 
 /* ---------- Config modal ---------- */
 .config-grid{display:flex;flex-direction:column;gap:12px}
+.link-magico-caixa{
+  margin-top:16px;padding:14px 16px;border:1px dashed var(--azul);border-radius:12px;
+  background:var(--azul-fundo);font-size:.76rem;color:var(--tinta-suave);line-height:1.55;
+  display:flex;flex-direction:column;gap:8px;
+}
+.link-magico-caixa strong{color:var(--azul-escuro);font-size:.8rem}
+.link-magico-caixa .btn{align-self:flex-start}

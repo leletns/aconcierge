@@ -42,9 +42,10 @@ Se o Netlify publicar a **pasta raiz** sem build, você vê:
 > ⚠️ **Segurança:** variáveis `VITE_*` entram no bundle JS **público** do site.
 > Se você colocar `VITE_SHEETS_API_SECRET` aqui, qualquer pessoa que descobrir a
 > URL do Netlify consegue ler e editar as planilhas via Web App.
-> **Recomendado:** deixe as variáveis de segredo em branco e configure a conexão
-> **dentro do app** (botão *conectar planilhas*) — fica salva só no navegador da
-> Helen (localStorage), não no site público.
+> **Recomendado:** deixe as variáveis de segredo em branco. Conecte **dentro do
+> app** (botão *conectar planilhas*) e use o **🔗 link de instalação** para o
+> Mac da Helen — a configuração viaja no fragmento `#cfg=` do link (não vai ao
+> servidor nem ao bundle) e se reaplica sozinha a cada abertura.
 
 Se mesmo assim preferir pré-configurar (URL do site mantida privada):
 
