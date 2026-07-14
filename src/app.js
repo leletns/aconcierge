@@ -1,8 +1,11 @@
 /**
- * blue. Central — orquestrador da UI
- * Uma única aplicação: Hoje · Planilha Recall · Planilha Cirurgias · Retornos · Pré-op · ⚙ Acompanhamentos
+ * blue. Central — orquestrador UI (visualização Linha Única / single-page)
+ *
+ * Uma página só, rolável: Smart Alert no topo → bloco Recall → bloco
+ * Cirurgias & Revisões → rodapé técnico. As planilhas completas ficam
+ * ocultas atrás de "ver detalhes". Card de gestão executivo em modal.
  */
-import { RECALL_COLS, CIRURGIAS_COLS, STATUS_MARCO } from './utils/constants.js';
+import { RECALL_COLS, CIRURGIAS_COLS, STATUS_RECALL, STATUS_MARCO } from './utils/constants.js';
 import { esc, iniciais, debounce } from './utils/helpers.js';
 import {
   fmt,
@@ -13,10 +16,11 @@ import {
   parseDataPt,
   fmtDataPlanilhaRecall,
   fmtDataPlanilhaCirurgias,
+  hoje,
 } from './utils/dates.js';
-import { parsePhone, formatPhoneDisplay, buildWhatsAppLink } from './utils/phone.js';
+import { formatPhoneDisplay, buildWhatsAppLink } from './utils/phone.js';
 import { patientKey } from './utils/matching.js';
-import { marcosEfetivos, estadoMarco, proximoMarco, templateParaCirurgia } from './utils/templates.js';
+import { estadoMarco, proximoMarco, templateParaCirurgia } from './utils/templates.js';
 import { Store } from './services/store.js';
 import { SyncService } from './services/syncService.js';
 import { SummaryService, pacienteSnapshot } from './services/summaryService.js';
@@ -29,14 +33,20 @@ import { AcompanhamentosScreen, marcosEditorHtml, bindMarcosEditor } from './scr
 
 const $ = (s) => document.querySelector(s);
 
-let fichaAtual = null; // patientKey da ficha aberta
-let contatoAtual = null; // key da linha de recall no modal de contato
-let resumoAtual = null; // patientKey do resumo
+/* ---------- estado da UI ---------- */
+let contatoAtual = null;
+let resumoAtual = null;
 let resumoTexto = '';
 let buscaIndice = 0;
+let atencaoMes = false;
+let alertaColapsado = false;
+let filtroRecall = 'todos';
+let filtroCirurgias = 'todas';
+let buscaRecall = '';
+let buscaCirurgias = '';
+const detalhesAbertos = { recall: false, cirurgias: false };
 
 /* ---------- estado central ---------- */
-
 const store = new Store({ onChange: () => renderizarTudo() });
 const syncService = new SyncService(store);
 store.sync = syncService;
@@ -45,19 +55,7 @@ const summaryService = new SummaryService({ geminiApiKey: store.config.geminiApi
 summaryService.setSheetsApi(syncService.api);
 syncService.onStatus((s) => renderSyncIndicator(s));
 
-/* ---------- rótulos dinâmicos das colunas de marcos ---------- */
-
-function headerLabelCirurgias(field) {
-  if (!['m3m', 'm6m', 'm1a'].includes(field)) return null;
-  for (const t of store.appConfig.templates) {
-    if (!t.padrao) continue;
-    const m = t.marcos.find((x) => x.col === field);
-    if (m) return m.label;
-  }
-  return null;
-}
-
-/* ---------- grades ---------- */
+/* ---------- grades (ver detalhes) ---------- */
 
 const gridRecall = new SpreadsheetGrid({
   el: null,
@@ -84,24 +82,34 @@ const gridCirurgias = new SpreadsheetGrid({
 
 let acompanhamentosScreen = null;
 
-/* ---------- mensagens WhatsApp ---------- */
+function headerLabelCirurgias(field) {
+  if (!['m3m', 'm6m', 'm1a'].includes(field)) return null;
+  for (const t of store.appConfig.templates) {
+    if (!t.padrao) continue;
+    const m = t.marcos.find((x) => x.col === field);
+    if (m) return m.label;
+  }
+  return null;
+}
+
+/* ---------- WhatsApp ---------- */
 
 function primeiroNome(nome) {
   return String(nome || '').trim().split(/\s+/)[0] || '';
 }
 
-function waMsgRetorno(nome, marcoLabel) {
-  return `Olá, ${primeiroNome(nome)}! Aqui é a Helen, da blue. Estou entrando em contato para agendarmos o seu retorno${marcoLabel ? ' de ' + marcoLabel : ''} com o Dr. Rafael. Qual o melhor dia para você?`;
+function waMsgRevisao(nome, marcoLabel) {
+  return `Olá, ${primeiroNome(nome)}! Aqui é a Helen, da blue. Estou entrando em contato para agendarmos a sua revisão${marcoLabel ? ' de ' + marcoLabel : ''} com o Dr. Rafael. Qual o melhor dia para você?`;
 }
 
 function waMsgRecall(nome) {
   return `Olá, ${primeiroNome(nome)}! Aqui é a Helen, da blue. Como você está? Estou entrando em contato para saber como tem sido a sua evolução e ver se podemos agendar uma avaliação com o Dr. Rafael.`;
 }
 
-function waBtn(telefone, msg, rotulo = '') {
+function waBtnMini(telefone, msg) {
   const url = buildWhatsAppLink(telefone, msg);
-  if (!url) return '<span class="celula-sub">sem tel.</span>';
-  return `<button type="button" class="btn btn-wa" data-wa="${esc(url)}">${rotulo || 'WhatsApp'}</button>`;
+  if (!url) return '<span class="wa-vazio" title="sem telefone">—</span>';
+  return `<button type="button" class="wa-mini" data-wa="${esc(url)}" title="abrir WhatsApp"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .611.611l4.458-1.495A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.372l-.357-.212-3.028 1.015 1.015-3.028-.212-.357A9.818 9.818 0 1 1 12 21.818z"/></svg></button>`;
 }
 
 function bindWa(root) {
@@ -115,317 +123,566 @@ function bindWa(root) {
   });
 }
 
-/* ---------- render principal ---------- */
+/* ---------- utilidades da página ---------- */
+
+const SELO_RECALL = {
+  Agendado: 'st-verde',
+  Pendente: 'st-ambar',
+  'Não agendou': 'st-coral',
+  'Sem Resposta': 'st-coral',
+  'Em Acompanhamento': 'st-azul',
+  'Sem interesse': 'st-neutro',
+};
+const SELO_MARCO = {
+  Realizada: 'st-verde',
+  Marcada: 'st-azul',
+  Pendente: 'st-ambar',
+  'Sem resposta': 'st-coral',
+};
+
+function digitandoEm(el) {
+  return (
+    el &&
+    el.contains(document.activeElement) &&
+    /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)
+  );
+}
+
+function fimDoMes() {
+  const d = hoje();
+  const pad = (n) => String(n).padStart(2, '0');
+  const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return `${ultimo.getFullYear()}-${pad(ultimo.getMonth() + 1)}-${pad(ultimo.getDate())}`;
+}
+
+function dataAcaoRecall(r) {
+  return parseDataPt(r.proximoContato) || parseDataPt(r.dataAgendada) || parseDataPt(r.dataContato) || '';
+}
+
+function contemBusca(linha, campos, termo) {
+  if (!termo.trim()) return true;
+  const t = termo.toLowerCase();
+  return campos.some((f) => String(linha[f] || '').toLowerCase().includes(t));
+}
+
+/* ============================================================
+   RENDER PRINCIPAL
+   ============================================================ */
 
 function renderizarTudo() {
-  const tela = store.filters.tela;
-  renderizarBadges();
-  if (tela === 'hoje') renderizarHoje();
-  if (tela === 'grid-recall' && !gridRecall.editando) gridRecall.render();
-  if (tela === 'grid-cirurgias' && !gridCirurgias.editando) gridCirurgias.render();
-  if (tela === 'retornos') renderizarRetornos();
-  if (tela === 'preop') renderizarPreop();
-  if (tela === 'acompanhamentos') {
-    const el = $('#acompanhamentos-lista');
-    const digitando = el.contains(document.activeElement) && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
-    if (!digitando) acompanhamentosScreen.render();
+  renderAlerta();
+  if (!digitandoEm($('#linhas-recall'))) renderLinhasRecall();
+  if (!digitandoEm($('#linhas-cirurgias'))) renderLinhasCirurgias();
+  if (detalhesAbertos.recall && !gridRecall.editando) gridRecall.render();
+  if (detalhesAbertos.cirurgias && !gridCirurgias.editando) gridCirurgias.render();
+  const acomp = $('#acompanhamentos-lista');
+  if ($('#veu-acomp')?.classList.contains('aberto') && !digitandoEm(acomp)) {
+    acompanhamentosScreen.render();
   }
 }
 
-function renderizarBadges() {
-  const recallsHoje = store.recallsVencidos().length;
+/* ---------- SMART ALERT ---------- */
 
-  let marcosAtrasados = 0;
-  for (const c of store.cirurgiasPassadas()) {
-    const marcos = store.marcosDe(c);
-    if (marcos.some((m) => estadoMarco(m) === 'atrasado')) marcosAtrasados++;
-  }
-
-  let preopCritico = 0;
-  for (const { c, iso } of store.cirurgiasFuturas()) {
-    if (difDias(iso) > 15) continue;
-    const p = store.pacienteDaLinha(c, 'cirurgias');
-    const extras = store.extrasDe(p ? p.key : patientKey(c.paciente));
-    if (extras.exames.some((e) => !e.feito)) preopCritico++;
-  }
-
-  $('#badge-recall').textContent = recallsHoje || '';
-  $('#badge-retornos').textContent = marcosAtrasados || '';
-  $('#badge-preop').textContent = preopCritico || '';
-  $('#badge-hoje').textContent = recallsHoje + marcosAtrasados + preopCritico || '';
-}
-
-/* ---------- HOJE ---------- */
-
-function renderizarHoje() {
-  const h = new Date().getHours();
-  const s = h < 12 ? 'bom dia' : h < 18 ? 'boa tarde' : 'boa noite';
-  $('#saudacao').innerHTML = `${s}, Helen<span class="ponto">.</span>`;
-  $('#data-hoje').textContent = new Date().toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
-
-  const bloco = (titulo, itens, vazioTitulo, vazioSub) => `
-    <div class="cartao bloco-hoje">
-      <h2>${titulo} <span class="contagem">${itens.length}</span></h2>
-      ${itens.length ? itens.slice(0, 8).join('') : `<div class="vazio"><strong>${vazioTitulo}</strong>${vazioSub}</div>`}
-    </div>`;
-
-  // 1. recall vencido
-  const itensRec = store.recallsVencidos().map((r) => {
-    const prox = parseDataPt(r.proximoContato) || parseDataPt(r.dataContato);
-    const dd = difDias(prox);
-    const selo =
-      dd < 0
-        ? `<span class="selo selo-coral">venceu há ${Math.abs(dd)}d</span>`
-        : `<span class="selo selo-ambar">é hoje</span>`;
-    return `<div class="item-fila" data-ficha-linha="recall:${r.key}">
-      <div class="info"><div class="nome">${esc(r.nome)}</div>
-      <div class="detalhe">${esc(r.status || '—')}${r.obs ? ' · ' + esc(r.obs.slice(0, 60)) : ''}</div></div>
-      ${selo}
-      <button class="btn btn-claro btn-mini-contato" data-contato="${r.key}">registrar</button>
-    </div>`;
-  });
-
-  // 2. retornos vencendo (próximos 7 dias ou atrasados)
-  const retornos = [];
+function urgencias() {
+  const recalls = store.recallsVencidos();
+  const revisoes = [];
   for (const c of store.cirurgiasPassadas()) {
     const marcos = store.marcosDe(c);
     const px = proximoMarco(marcos);
-    if (!px || !px.dataISO) continue;
-    const dd = difDias(px.dataISO);
-    if (dd <= 7) retornos.push({ c, px, dd });
+    if (px && px.dataISO && difDias(px.dataISO) <= 0) revisoes.push({ c, px });
   }
-  retornos.sort((a, b) => a.dd - b.dd);
-  const itensRet = retornos.map(({ c, px, dd }) => {
-    const selo =
-      dd < 0
-        ? `<span class="selo selo-coral">atrasado ${Math.abs(dd)}d</span>`
-        : dd === 0
-          ? `<span class="selo selo-ambar">é hoje</span>`
-          : `<span class="selo selo-azul">em ${dd}d</span>`;
-    return `<div class="item-fila" data-ficha-linha="cirurgias:${c.key}">
-      <div class="info"><div class="nome">${esc(c.paciente)}</div>
-      <div class="detalhe">retorno ${esc(px.label)} · ${fmt(px.dataISO)} · ${esc(px.status)}</div></div>${selo}</div>`;
-  });
-
-  // 3. pré-op em atenção
-  const itensPre = store
-    .cirurgiasFuturas()
-    .filter(({ iso }) => difDias(iso) <= 21)
-    .map(({ c, iso }) => {
-      const dd = difDias(iso);
-      const p = store.pacienteDaLinha(c, 'cirurgias');
-      const extras = store.extrasDe(p ? p.key : patientKey(c.paciente));
-      const pend = extras.exames.filter((e) => !e.feito).length;
-      const selo = dd <= 7 ? 'selo-coral' : dd <= 15 ? 'selo-ambar' : 'selo-azul';
-      return `<div class="item-fila" data-nav="preop">
-        <div class="info"><div class="nome">${esc(c.paciente)}</div>
-        <div class="detalhe">${pend ? pend + ' exame(s) pendente(s) · ' : ''}cirurgia em ${fmt(iso)}</div></div>
-        <span class="selo ${selo}">${dd === 0 ? 'é hoje' : 'faltam ' + dd + 'd'}</span></div>`;
-    });
-
-  $('#grade-hoje').innerHTML =
-    bloco('recall para hoje', itensRec, 'fila limpa', 'nenhuma paciente aguardando contato hoje') +
-    bloco('retornos desta semana', itensRet, 'tudo em dia', 'nenhum retorno vencendo nos próximos 7 dias') +
-    bloco('pré-op em atenção', itensPre, 'exames em dia', 'nenhuma cirurgia nos próximos 21 dias') +
-    (store.temExemplos
-      ? `<div style="grid-column:1/-1;text-align:center;padding-top:4px">
-        <button class="btn btn-fantasma" id="btn-limpar-exemplos">estes são dados de exemplo — conecte as planilhas ou clique para removê-los</button></div>`
-      : '');
-
-  $('#grade-hoje').querySelectorAll('[data-ficha-linha]').forEach((el) =>
-    el.addEventListener('click', () => {
-      const [tipo, key] = el.dataset.fichaLinha.split(':');
-      const linha = tipo === 'recall' ? store.getRecallRow(key) : store.getCirurgiaRow(key);
-      if (linha) abrirFichaDaLinha(linha, tipo);
-    }),
-  );
-  $('#grade-hoje').querySelectorAll('.btn-mini-contato').forEach((el) =>
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      abrirContato(el.dataset.contato);
-    }),
-  );
-  $('#grade-hoje').querySelectorAll('[data-nav="preop"]').forEach((el) =>
-    el.addEventListener('click', () => irPara('preop')),
-  );
-  $('#btn-limpar-exemplos')?.addEventListener('click', () => {
-    store.limparExemplos();
-    showToast('exemplos removidos');
-  });
+  const cirurgiasProximas = store.cirurgiasFuturas().filter(({ iso }) => difDias(iso) <= 7);
+  return { recalls, revisoes, cirurgiasProximas };
 }
 
-/* ---------- RETORNOS ---------- */
+function renderAlerta() {
+  const el = $('#smart-alert');
+  const { recalls, revisoes, cirurgiasProximas } = urgencias();
+  const total = recalls.length + revisoes.length + cirurgiasProximas.length;
 
-function renderizarRetornos() {
-  const filtro = store.filters.retornos;
-  const filtros = [
-    { id: 'todos', rotulo: 'todos' },
-    { id: 'atrasados', rotulo: 'atrasados' },
-    { id: '30d', rotulo: 'próximos 30 dias' },
-    { id: 'completos', rotulo: 'jornada completa' },
-  ];
-  $('#filtros-retornos').innerHTML = filtros
-    .map((f) => `<button class="filtro ${filtro === f.id ? 'ativo' : ''}" data-fr="${f.id}">${f.rotulo}</button>`)
-    .join('');
-  $('#filtros-retornos').querySelectorAll('[data-fr]').forEach((b) =>
-    b.addEventListener('click', () => store.setFilter('retornos', b.dataset.fr)),
-  );
+  if (!total) {
+    el.innerHTML = `<div class="alerta alerta-ok">✓ nenhuma urgência para hoje — operação sob controle</div>`;
+    return;
+  }
 
-  let lista = store
-    .cirurgiasPassadas()
-    .filter((c) => parseDataPt(c.data))
-    .map((c) => {
-      const marcos = store.marcosDe(c);
-      return { c, marcos, px: proximoMarco(marcos) };
-    });
+  const grupo = (titulo, itens) =>
+    itens.length
+      ? `<div class="alerta-grupo"><h4>${titulo} <span class="contagem">${itens.length}</span></h4>${itens.slice(0, 6).join('')}</div>`
+      : '';
 
-  if (filtro === 'atrasados') lista = lista.filter(({ marcos }) => marcos.some((m) => estadoMarco(m) === 'atrasado'));
-  else if (filtro === '30d')
-    lista = lista.filter(({ px }) => px && px.dataISO && difDias(px.dataISO) >= 0 && difDias(px.dataISO) <= 30);
-  else if (filtro === 'completos') lista = lista.filter(({ px }) => !px);
-
-  lista.sort((a, b) => {
-    const da = a.px?.dataISO ? difDias(a.px.dataISO) : 9999;
-    const db = b.px?.dataISO ? difDias(b.px.dataISO) : 9999;
-    return da - db;
+  const itensRecall = recalls.map((r) => {
+    const dd = difDias(dataAcaoRecall(r));
+    return `<div class="alerta-item" data-al-recall="${r.key}">
+      <span class="alerta-nome">${esc(r.nome)}</span>
+      <span class="selo ${dd < 0 ? 'selo-coral' : 'selo-ambar'}">${dd < 0 ? 'venceu há ' + Math.abs(dd) + 'd' : 'é hoje'}</span>
+      <button class="btn btn-claro btn-mini" data-al-contato="${r.key}">registrar</button>
+    </div>`;
   });
 
-  $('#corpo-retornos').innerHTML = lista.length
-    ? lista
-        .map(({ c, marcos, px }) => {
-          const p = store.pacienteDaLinha(c, 'cirurgias');
-          const trilho =
-            `<div class="trilho">` +
-            marcos
-              .map(
-                (m) =>
-                  `<div class="no ${estadoMarco(m)}" title="${esc(m.label)} · ${esc(m.status)}"><div class="bola"></div><div class="rotulo">${esc(m.label.replace(' dias', 'd').replace(' meses', 'm').replace(' ano', 'a'))}</div></div>`,
-              )
-              .join('') +
-            `</div>`;
-          const proximo = px
-            ? `<div style="font-weight:600">${esc(px.label)}</div><div class="celula-sub">${fmtLonga(px.dataISO)}${px.dataISO && difDias(px.dataISO) < 0 ? ' · <span style="color:var(--coral);font-weight:600">' + Math.abs(difDias(px.dataISO)) + 'd de atraso</span>' : ''}</div>`
-            : `<span class="selo selo-verde">jornada completa</span>`;
-          const statusSel = px
-            ? `<select class="campo mini sel-marco" data-cir="${c.key}" data-marco="${px.id}">` +
-              STATUS_MARCO.map((s) => `<option ${px.status === s ? 'selected' : ''}>${s}</option>`).join('') +
-              `</select>`
-            : '—';
-          return `<tr>
-        <td><div class="celula-nome" data-ficha-cir="${c.key}">${esc(c.paciente)}</div><div class="celula-sub">operada em ${esc(c.data)}</div></td>
-        <td><div class="celula-sub" style="max-width:220px;white-space:normal">${esc(c.cirurgia || '—')}</div></td>
-        <td>${trilho}</td>
-        <td>${proximo}</td>
-        <td>${statusSel}</td>
-        <td style="white-space:nowrap;text-align:right">${waBtn(p?.telefone, waMsgRetorno(c.paciente, px?.label), 'WhatsApp')}</td>
-      </tr>`;
-        })
-        .join('')
-    : `<tr><td colspan="6"><div class="vazio"><strong>nenhuma cirurgia realizada</strong>as cirurgias com data passada aparecem aqui automaticamente</div></td></tr>`;
+  const itensRev = revisoes.map(({ c, px }) => {
+    const dd = difDias(px.dataISO);
+    return `<div class="alerta-item" data-al-cir="${c.key}">
+      <span class="alerta-nome">${esc(c.paciente)}</span>
+      <span class="alerta-det">revisão ${esc(px.label)}</span>
+      <span class="selo ${dd < 0 ? 'selo-coral' : 'selo-ambar'}">${dd < 0 ? Math.abs(dd) + 'd atrasada' : 'é hoje'}</span>
+    </div>`;
+  });
 
-  $('#corpo-retornos').querySelectorAll('[data-ficha-cir]').forEach((el) =>
-    el.addEventListener('click', () => {
-      const linha = store.getCirurgiaRow(el.dataset.fichaCir);
+  const itensCir = cirurgiasProximas.map(({ c, iso }) => {
+    const dd = difDias(iso);
+    return `<div class="alerta-item" data-al-cir="${c.key}">
+      <span class="alerta-nome">${esc(c.paciente)}</span>
+      <span class="alerta-det">${esc(c.cirurgia || 'cirurgia')}</span>
+      <span class="selo ${dd <= 2 ? 'selo-coral' : 'selo-azul'}">${dd === 0 ? 'é hoje' : 'em ' + dd + 'd'}</span>
+    </div>`;
+  });
+
+  el.innerHTML = `
+    <div class="alerta ${alertaColapsado ? 'colapsado' : ''}">
+      <button type="button" class="alerta-topo" id="alerta-toggle">
+        <span class="alerta-badge">${total}</span>
+        <strong>tarefas críticas &amp; pacientes do dia</strong>
+        <span class="alerta-resumo">${recalls.length ? recalls.length + ' recall' : ''}${revisoes.length ? ' · ' + revisoes.length + ' revisão(ões)' : ''}${cirurgiasProximas.length ? ' · ' + cirurgiasProximas.length + ' cirurgia(s) próxima(s)' : ''}</span>
+        <span class="alerta-seta">${alertaColapsado ? '▾' : '▴'}</span>
+      </button>
+      <div class="alerta-corpo">
+        ${grupo('📞 pacientes do dia — recall', itensRecall)}
+        ${grupo('🔄 revisões vencidas', itensRev)}
+        ${grupo('🏥 cirurgias próximas', itensCir)}
+      </div>
+    </div>`;
+
+  $('#alerta-toggle')?.addEventListener('click', () => {
+    alertaColapsado = !alertaColapsado;
+    renderAlerta();
+  });
+  el.querySelectorAll('[data-al-recall]').forEach((i) =>
+    i.addEventListener('click', (e) => {
+      if (e.target.closest('[data-al-contato]')) return;
+      const linha = store.getRecallRow(i.dataset.alRecall);
+      if (linha) abrirFichaDaLinha(linha, 'recall');
+    }),
+  );
+  el.querySelectorAll('[data-al-contato]').forEach((b) =>
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      abrirContato(b.dataset.alContato);
+    }),
+  );
+  el.querySelectorAll('[data-al-cir]').forEach((i) =>
+    i.addEventListener('click', () => {
+      const linha = store.getCirurgiaRow(i.dataset.alCir);
       if (linha) abrirFichaDaLinha(linha, 'cirurgias');
     }),
   );
-  $('#corpo-retornos').querySelectorAll('.sel-marco').forEach((el) =>
-    el.addEventListener('change', () => {
-      const c = store.getCirurgiaRow(el.dataset.cir);
-      if (!c) return;
-      const marco = store.marcosDe(c).find((m) => m.id === el.dataset.marco);
-      if (!marco) return;
-      store.setMarcoStatus(c, marco, el.value);
-      showToast(el.value === 'Realizada' ? 'retorno concluído' : 'status atualizado');
-    }),
-  );
-  bindWa($('#corpo-retornos'));
 }
 
-/* ---------- PRÉ-OP ---------- */
+/* ---------- BLOCO RECALL (linhas) ---------- */
 
-function renderizarPreop() {
-  const lista = store.cirurgiasFuturas();
-  $('#grade-preop').innerHTML = lista.length
-    ? lista
-        .map(({ c, iso }) => {
-          const dd = difDias(iso);
-          const p = store.pacienteDaLinha(c, 'cirurgias');
-          const pKey = p ? p.key : patientKey(c.paciente);
-          const extras = store.extrasDe(pKey);
-          const feitos = extras.exames.filter((e) => e.feito).length;
-          const total = extras.exames.length;
-          const pct = total ? Math.round((feitos / total) * 100) : 0;
-          const cor = dd <= 7 && feitos < total ? 'var(--coral)' : dd <= 15 && feitos < total ? 'var(--ambar)' : 'var(--verde)';
-          return `<div class="cartao cartao-preop">
-        <div class="preop-topo">
-          <div><div class="nome" data-ficha-cir="${c.key}">${esc(c.paciente)}</div>
-          <div class="proc">${esc(c.cirurgia || '—')} · ${esc(c.data)}${c.hospital ? ' · ' + esc(c.hospital) : ''}</div></div>
-          <div class="contagem-regressiva"><div class="dias" style="color:${cor}">${dd === 0 ? 'hoje' : dd}</div>
-          <div class="rotulo">${dd === 0 ? 'é o dia' : 'dias'}</div></div>
+function renderLinhasRecall() {
+  const el = $('#linhas-recall');
+
+  const chips = ['todos', ...STATUS_RECALL];
+  $('#filtros-recall').innerHTML = chips
+    .map((s) => `<button class="filtro ${filtroRecall === s ? 'ativo' : ''}" data-fr="${esc(s)}">${s === 'todos' ? 'todas' : esc(s)}</button>`)
+    .join('');
+  $('#filtros-recall').querySelectorAll('[data-fr]').forEach((b) =>
+    b.addEventListener('click', () => {
+      filtroRecall = b.dataset.fr;
+      renderLinhasRecall();
+    }),
+  );
+
+  let rows = store.recall.filter((r) => String(r.nome || '').trim());
+  if (filtroRecall !== 'todos') rows = rows.filter((r) => (r.status || '') === filtroRecall);
+  if (atencaoMes) {
+    const fim = fimDoMes();
+    rows = rows.filter((r) => {
+      if (r.status === 'Sem interesse') return false;
+      const d = dataAcaoRecall(r);
+      return d && d <= fim;
+    });
+  }
+  rows = rows.filter((r) => contemBusca(r, ['nome', 'obs', 'ultimaConsulta', 'status'], buscaRecall));
+
+  rows.sort((a, b) => {
+    const da = dataAcaoRecall(a) || '9999';
+    const db = dataAcaoRecall(b) || '9999';
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+
+  el.innerHTML = rows.length
+    ? rows
+        .map((r) => {
+          const prox = dataAcaoRecall(r);
+          const dd = prox ? difDias(prox) : null;
+          const vencida = dd !== null && dd <= 0 && !['Agendado', 'Sem interesse'].includes(r.status || '');
+          return `<div class="linha" data-key="${r.key}">
+        <div class="linha-nome" data-ficha="${r.key}" title="abrir ficha">
+          ${esc(r.nome)}
+          <span class="linha-sub">${esc(r.ultimaConsulta || '')}</span>
         </div>
-        <div class="legenda-exames"><span>exames</span><span>${feitos} de ${total}</span></div>
-        <div class="barra-exames"><div style="width:${pct}%;background:${cor}"></div></div>
-        <div class="lista-exames">${extras.exames
-          .map(
-            (e, i) => `
-          <div class="exame ${e.feito ? 'feito' : ''}" data-exame="${pKey}:${i}">
-            <div class="caixa"></div><span>${esc(e.nome)}</span>
-            <button class="remover btn-rem-exame" data-pk="${pKey}" data-i="${i}">×</button>
-          </div>`,
-          )
-          .join('')}
-        </div>
-        <div class="add-exame">
-          <input class="campo add-exame-input" data-pk="${pKey}" placeholder="adicionar exame (Enter)">
-        </div>
-        <div class="preop-rodape">
-          ${feitos === total ? '<span class="selo selo-verde">tudo pronto para a cirurgia</span>' : `<span class="selo ${dd <= 7 ? 'selo-coral' : dd <= 15 ? 'selo-ambar' : 'selo-azul'}">${total - feitos} pendente${total - feitos > 1 ? 's' : ''}</span>`}
-          ${waBtn(p?.telefone, waMsgRecall(c.paciente), 'WhatsApp')}
+        <select class="linha-status ${SELO_RECALL[r.status] || 'st-neutro'}" data-status="${r.key}" title="status — salva na planilha">
+          ${['', ...STATUS_RECALL].map((s) => `<option value="${esc(s)}" ${(r.status || '') === s ? 'selected' : ''}>${s || '—'}</option>`).join('')}
+        </select>
+        <input class="linha-data ${vencida ? 'vencida' : ''}" data-prox="${r.key}" value="${esc(r.proximoContato || '')}" placeholder="próx. contato" title="próximo contato — salva na planilha">
+        <input class="linha-obs" data-obs="${r.key}" value="${esc(r.obs || '')}" placeholder="observações da jornada… (salva sozinho)">
+        <div class="linha-acoes">
+          ${waBtnMini(r.contato, waMsgRecall(r.nome))}
+          <button type="button" class="btn btn-claro btn-mini" data-reg="${r.key}">registrar</button>
         </div>
       </div>`;
         })
         .join('')
-    : `<div class="cartao bloco-hoje" style="grid-column:1/-1"><div class="vazio"><strong>nenhuma cirurgia marcada</strong>adicione uma linha na planilha cirurgias com data futura</div></div>`;
+    : `<div class="vazio"><strong>nenhuma paciente aqui</strong>ajuste a busca ou os filtros</div>`;
 
-  $('#grade-preop').querySelectorAll('[data-ficha-cir]').forEach((el) =>
-    el.addEventListener('click', () => {
-      const linha = store.getCirurgiaRow(el.dataset.fichaCir);
+  bindLinhasRecall(el);
+}
+
+function bindLinhasRecall(el) {
+  el.querySelectorAll('[data-ficha]').forEach((n) =>
+    n.addEventListener('click', () => {
+      const linha = store.getRecallRow(n.dataset.ficha);
+      if (linha) abrirFichaDaLinha(linha, 'recall');
+    }),
+  );
+  el.querySelectorAll('[data-status]').forEach((s) =>
+    s.addEventListener('change', () => {
+      s.blur();
+      store.editarCelula('recall', s.dataset.status, 'status', s.value);
+      showToast('status salvo na planilha');
+    }),
+  );
+  el.querySelectorAll('[data-prox]').forEach((i) => {
+    const salvar = () => {
+      const linha = store.getRecallRow(i.dataset.prox);
+      if (linha && i.value !== (linha.proximoContato || '')) {
+        store.editarCelula('recall', i.dataset.prox, 'proximoContato', i.value.trim());
+        showToast('próximo contato salvo');
+      }
+    };
+    i.addEventListener('change', salvar);
+    i.addEventListener('keydown', (e) => e.key === 'Enter' && i.blur());
+  });
+  el.querySelectorAll('[data-obs]').forEach((i) => {
+    const salvar = debounce(() => {
+      const linha = store.getRecallRow(i.dataset.obs);
+      if (linha && i.value !== (linha.obs || '')) {
+        store.editarCelula('recall', i.dataset.obs, 'obs', i.value);
+      }
+    }, 800);
+    i.addEventListener('input', salvar);
+    i.addEventListener('keydown', (e) => e.key === 'Enter' && i.blur());
+  });
+  el.querySelectorAll('[data-reg]').forEach((b) =>
+    b.addEventListener('click', () => abrirContato(b.dataset.reg)),
+  );
+  bindWa(el);
+}
+
+/* ---------- BLOCO CIRURGIAS & REVISÕES (linhas) ---------- */
+
+function renderLinhasCirurgias() {
+  const el = $('#linhas-cirurgias');
+
+  const chips = [
+    ['todas', 'todas'],
+    ['vencidas', 'revisões vencidas'],
+    ['mes', 'este mês'],
+    ['preop', 'pré-op'],
+    ['concluidas', 'concluídas'],
+  ];
+  $('#filtros-cirurgias').innerHTML = chips
+    .map(([id, rotulo]) => `<button class="filtro ${filtroCirurgias === id ? 'ativo' : ''}" data-fc="${id}">${rotulo}</button>`)
+    .join('');
+  $('#filtros-cirurgias').querySelectorAll('[data-fc]').forEach((b) =>
+    b.addEventListener('click', () => {
+      filtroCirurgias = b.dataset.fc;
+      renderLinhasCirurgias();
+    }),
+  );
+
+  const fim = fimDoMes();
+  let itens = store.cirurgias
+    .filter((c) => String(c.paciente || '').trim())
+    .map((c) => {
+      const iso = parseDataPt(c.data);
+      const futura = iso && difDias(iso) >= 0;
+      const marcos = futura ? [] : store.marcosDe(c);
+      const px = futura ? null : proximoMarco(marcos);
+      return { c, iso, futura, marcos, px };
+    });
+
+  if (filtroCirurgias === 'vencidas') itens = itens.filter(({ px }) => px && px.dataISO && difDias(px.dataISO) <= 0);
+  else if (filtroCirurgias === 'mes') itens = itens.filter(({ px, futura, iso }) => (px && px.dataISO && px.dataISO <= fim) || (futura && iso <= fim));
+  else if (filtroCirurgias === 'preop') itens = itens.filter(({ futura }) => futura);
+  else if (filtroCirurgias === 'concluidas') itens = itens.filter(({ futura, px }) => !futura && !px);
+
+  if (atencaoMes) {
+    itens = itens.filter(({ px, futura, iso }) => (px && px.dataISO && px.dataISO <= fim) || (futura && iso && iso <= fim));
+  }
+  itens = itens.filter(({ c }) => contemBusca(c, ['paciente', 'cirurgia', 'hospital'], buscaCirurgias));
+
+  itens.sort((a, b) => {
+    const da = a.futura ? a.iso : a.px?.dataISO || '9999';
+    const db = b.futura ? b.iso : b.px?.dataISO || '9999';
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+
+  el.innerHTML = itens.length
+    ? itens
+        .map(({ c, iso, futura, px }) => {
+          const p = store.pacienteDaLinha(c, 'cirurgias');
+          const pKey = p ? p.key : patientKey(c.paciente);
+          const recallRow = p?.recallRows[p.recallRows.length - 1];
+          const obsValor = recallRow ? recallRow.obs || '' : store.extrasDe(pKey).nota || '';
+
+          let statusHtml;
+          let dataHtml;
+          if (futura) {
+            const dd = difDias(iso);
+            statusHtml = `<span class="linha-status st-azul linha-status-fixo">pré-op · ${dd === 0 ? 'é hoje' : 'faltam ' + dd + 'd'}</span>`;
+            dataHtml = `<span class="linha-data">${esc(c.data)}</span>`;
+          } else if (px) {
+            const dd = px.dataISO ? difDias(px.dataISO) : null;
+            statusHtml = `<select class="linha-status ${SELO_MARCO[px.status] || 'st-neutro'}" data-marco="${c.key}:${px.id}" title="revisão ${esc(px.label)} — salva na planilha">
+              ${STATUS_MARCO.map((s) => `<option ${px.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>`;
+            dataHtml = `<span class="linha-data ${dd !== null && dd < 0 ? 'vencida' : ''}" title="revisão ${esc(px.label)}">${px.dataISO ? fmt(px.dataISO) : '—'} · ${esc(px.label)}</span>`;
+          } else {
+            statusHtml = `<span class="linha-status st-verde linha-status-fixo">revisões concluídas ✓</span>`;
+            dataHtml = `<span class="linha-data">—</span>`;
+          }
+
+          return `<div class="linha" data-key="${c.key}">
+        <div class="linha-nome" data-ficha-cir="${c.key}" title="abrir ficha">
+          ${esc(c.paciente)}
+          <span class="linha-sub" title="${esc(c.cirurgia || '')}">${esc((c.cirurgia || '').slice(0, 60))}${(c.cirurgia || '').length > 60 ? '…' : ''}</span>
+        </div>
+        ${statusHtml}
+        ${dataHtml}
+        <input class="linha-obs" data-obs-cir="${c.key}" value="${esc(obsValor)}" placeholder="${recallRow ? 'observações (planilha Recall)…' : 'observações (nota do app)…'}">
+        <div class="linha-acoes">
+          ${waBtnMini(p?.telefone, waMsgRevisao(c.paciente, px?.label))}
+        </div>
+      </div>`;
+        })
+        .join('')
+    : `<div class="vazio"><strong>nenhuma cirurgia aqui</strong>ajuste a busca ou os filtros</div>`;
+
+  bindLinhasCirurgias(el);
+}
+
+function bindLinhasCirurgias(el) {
+  el.querySelectorAll('[data-ficha-cir]').forEach((n) =>
+    n.addEventListener('click', () => {
+      const linha = store.getCirurgiaRow(n.dataset.fichaCir);
       if (linha) abrirFichaDaLinha(linha, 'cirurgias');
     }),
   );
-  $('#grade-preop').querySelectorAll('[data-exame]').forEach((el) =>
-    el.addEventListener('click', (e) => {
-      if (e.target.classList.contains('btn-rem-exame')) return;
-      const [pk, i] = el.dataset.exame.split(':');
-      const extras = store.extrasDe(pk);
-      extras.exames[+i].feito = !extras.exames[+i].feito;
-      store.salvarExtras();
-    }),
-  );
-  $('#grade-preop').querySelectorAll('.btn-rem-exame').forEach((el) =>
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const extras = store.extrasDe(el.dataset.pk);
-      extras.exames.splice(+el.dataset.i, 1);
-      store.salvarExtras();
-    }),
-  );
-  $('#grade-preop').querySelectorAll('.add-exame-input').forEach((el) =>
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && el.value.trim()) {
-        const extras = store.extrasDe(el.dataset.pk);
-        extras.exames.push({ nome: el.value.trim(), feito: false });
-        store.salvarExtras();
-        showToast('exame adicionado');
+  el.querySelectorAll('[data-marco]').forEach((s) =>
+    s.addEventListener('change', () => {
+      s.blur();
+      const [cirKey, marcoId] = s.dataset.marco.split(':');
+      const c = store.getCirurgiaRow(cirKey);
+      const marco = c && store.marcosDe(c).find((m) => m.id === marcoId);
+      if (marco) {
+        store.setMarcoStatus(c, marco, s.value);
+        showToast(s.value === 'Realizada' ? 'revisão concluída ✓' : 'status da revisão salvo');
       }
     }),
   );
-  bindWa($('#grade-preop'));
+  el.querySelectorAll('[data-obs-cir]').forEach((i) => {
+    const salvar = debounce(() => {
+      const c = store.getCirurgiaRow(i.dataset.obsCir);
+      if (!c) return;
+      const p = store.pacienteDaLinha(c, 'cirurgias');
+      const recallRow = p?.recallRows[p.recallRows.length - 1];
+      if (recallRow) {
+        if (i.value !== (recallRow.obs || '')) store.editarCelula('recall', recallRow.key, 'obs', i.value);
+      } else {
+        const pKey = p ? p.key : patientKey(c.paciente);
+        store.extrasDe(pKey).nota = i.value;
+        store.salvarExtras();
+      }
+    }, 800);
+    i.addEventListener('input', salvar);
+    i.addEventListener('keydown', (e) => e.key === 'Enter' && i.blur());
+  });
+  bindWa(el);
+}
+
+/* ---------- CARD DE GESTÃO blue. ---------- */
+
+function resumoGestao() {
+  const recall = store.recall.filter((r) => String(r.nome || '').trim());
+  const total = recall.length;
+  const porStatus = {};
+  STATUS_RECALL.forEach((s) => (porStatus[s] = 0));
+  let semStatus = 0;
+  recall.forEach((r) => {
+    if (porStatus[r.status] !== undefined) porStatus[r.status]++;
+    else semStatus++;
+  });
+
+  const cirurgias = store.cirurgias.filter((c) => String(c.paciente || '').trim());
+  let revVencidas = 0;
+  let revMarcadas = 0;
+  let revRealizadas = 0;
+  let preop = 0;
+  for (const c of cirurgias) {
+    const iso = parseDataPt(c.data);
+    if (iso && difDias(iso) >= 0) {
+      preop++;
+      continue;
+    }
+    for (const m of store.marcosDe(c)) {
+      if (!m.dataISO || difDias(m.dataISO) > 0) continue;
+      if (m.status === 'Realizada') revRealizadas++;
+      else if (m.status === 'Marcada') revMarcadas++;
+      else revVencidas++;
+    }
+  }
+
+  const motivos = {};
+  let gargaloSemResposta = 0;
+  let gargaloAguardando = 0;
+  const kw = [
+    [/dra\.?\s*aline/i, 'preferência Dra. Aline'],
+    [/financeir|valor|investimento|pagamento|plano\b/i, 'financeiro'],
+    [/viag|viaj|distân|distanc|país|exterior/i, 'viagem / distância'],
+    [/outro m[ée]dico|outra cl[ií]nica|outro profissional/i, 'outro profissional'],
+  ];
+  recall.forEach((r) => {
+    if (r.motivoRecusa) motivos[r.motivoRecusa] = (motivos[r.motivoRecusa] || 0) + 1;
+    const obs = String(r.obs || '');
+    kw.forEach(([re, label]) => {
+      if (re.test(obs)) motivos[label] = (motivos[label] || 0) + 1;
+    });
+    if (r.status === 'Sem Resposta') gargaloSemResposta++;
+    if (/aguardando resposta/i.test(obs)) gargaloAguardando++;
+  });
+
+  const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
+  return {
+    total,
+    porStatus,
+    semStatus,
+    pct,
+    cirurgias: cirurgias.length,
+    preop,
+    revVencidas,
+    revMarcadas,
+    revRealizadas,
+    motivos: Object.entries(motivos).sort((a, b) => b[1] - a[1]).slice(0, 5),
+    gargaloSemResposta,
+    gargaloAguardando,
+  };
+}
+
+function abrirGestao() {
+  const g = resumoGestao();
+  const dataLonga = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  const tileCor = {
+    Agendado: 'g-verde',
+    Pendente: 'g-ambar',
+    'Não agendou': 'g-coral',
+    'Sem Resposta': 'g-coral',
+    'Em Acompanhamento': 'g-azul',
+    'Sem interesse': 'g-neutro',
+  };
+
+  const tiles = STATUS_RECALL.filter((s) => g.porStatus[s] > 0)
+    .map(
+      (s) => `<div class="g-tile ${tileCor[s]}">
+        <div class="g-pct">${g.pct(g.porStatus[s])}%</div>
+        <div class="g-label">${esc(s)}</div>
+        <div class="g-n">${g.porStatus[s]} paciente${g.porStatus[s] !== 1 ? 's' : ''}</div>
+      </div>`,
+    )
+    .join('');
+
+  const totalRev = g.revRealizadas + g.revMarcadas + g.revVencidas;
+  const tilesRev = totalRev
+    ? `<div class="g-tile g-verde"><div class="g-pct">${Math.round((g.revRealizadas / totalRev) * 100)}%</div><div class="g-label">Revisões realizadas</div><div class="g-n">${g.revRealizadas} de ${totalRev} vencidas</div></div>
+       <div class="g-tile g-azul"><div class="g-pct">${Math.round((g.revMarcadas / totalRev) * 100)}%</div><div class="g-label">Revisões marcadas</div><div class="g-n">${g.revMarcadas}</div></div>
+       <div class="g-tile g-ambar"><div class="g-pct">${Math.round((g.revVencidas / totalRev) * 100)}%</div><div class="g-label">Revisões a agendar</div><div class="g-n">${g.revVencidas}</div></div>`
+    : '';
+
+  const motivosHtml = g.motivos.length
+    ? g.motivos.map(([m, n]) => `${esc(m)} <b>(${n})</b>`).join(' · ')
+    : 'sem recusas registradas';
+
+  $('#cartao-gestao').innerHTML = `
+    <div class="gestao-topo">
+      <div class="gestao-logo">blue<span class="gestao-ponto">.</span></div>
+      <div class="gestao-cab">
+        <div class="gestao-titulo">Relatório de Gestão</div>
+        <div class="gestao-data">${dataLonga} · Central da Concierge — Helen</div>
+      </div>
+    </div>
+
+    <div class="gestao-visao">
+      <b>${g.total}</b> pacientes em recall ativo · <b>${g.cirurgias}</b> cirurgias acompanhadas
+      (${g.preop} em pré-operatório) · <b>${g.porStatus['Agendado']}</b> com consulta agendada ·
+      <b>${g.revRealizadas + g.revMarcadas}</b> revisões realizadas ou marcadas.
+    </div>
+
+    <div class="gestao-secao">Status do recall</div>
+    <div class="gestao-tiles">${tiles}</div>
+
+    ${totalRev ? `<div class="gestao-secao">Revisões pós-operatórias</div><div class="gestao-tiles">${tilesRev}</div>` : ''}
+
+    <div class="gestao-secao">Insights ✨</div>
+    <div class="gestao-insights">
+      <div class="g-insight">💬 <b>Motivos de recusa:</b> ${motivosHtml}</div>
+      <div class="g-insight">📵 <b>Gargalos de comunicação:</b> ${g.gargaloSemResposta} paciente${g.gargaloSemResposta !== 1 ? 's' : ''} sem resposta no WhatsApp · ${g.gargaloAguardando} aguardando retorno</div>
+      <div class="g-insight g-gemini" id="gestao-gemini"></div>
+    </div>
+
+    <div class="gestao-rodape">operação sob controle · gerado em tempo real pela blue<span class="gestao-ponto">.</span> Central</div>`;
+
+  abrir('veu-gestao');
+
+  // refinamento assíncrono via Gemini (quando conectado) — o card já está completo sem ele
+  if (syncService.api.configured) {
+    const alvo = $('#gestao-gemini');
+    alvo.innerHTML = '<span class="spinner spinner-inline"></span> análise Gemini…';
+    syncService.api
+      .summarize({
+        _tipo: 'gestao',
+        totalRecall: g.total,
+        porStatus: g.porStatus,
+        cirurgias: g.cirurgias,
+        preop: g.preop,
+        revisoes: { realizadas: g.revRealizadas, marcadas: g.revMarcadas, aAgendar: g.revVencidas },
+        motivos: Object.fromEntries(g.motivos),
+        gargalos: { semResposta: g.gargaloSemResposta, aguardando: g.gargaloAguardando },
+      })
+      .then((r) => {
+        const el = $('#gestao-gemini');
+        if (el) el.innerHTML = `✨ <b>Análise Gemini:</b> ${esc(r.text)}`;
+      })
+      .catch(() => {
+        const el = $('#gestao-gemini');
+        if (el) el.innerHTML = '';
+      });
+  }
+}
+
+function textoGestao() {
+  const g = resumoGestao();
+  const linhas = [
+    `blue. — Relatório de Gestão · ${new Date().toLocaleDateString('pt-BR')}`,
+    '',
+    `${g.total} pacientes em recall · ${g.cirurgias} cirurgias (${g.preop} pré-op)`,
+    ...STATUS_RECALL.filter((s) => g.porStatus[s] > 0).map((s) => `• ${s}: ${g.porStatus[s]} (${g.pct(g.porStatus[s])}%)`),
+    `• Revisões: ${g.revRealizadas} realizadas · ${g.revMarcadas} marcadas · ${g.revVencidas} a agendar`,
+    `• Motivos de recusa: ${g.motivos.map(([m, n]) => `${m} (${n})`).join(', ') || '—'}`,
+    `• Gargalos: ${g.gargaloSemResposta} sem resposta no WhatsApp · ${g.gargaloAguardando} aguardando retorno`,
+  ];
+  return linhas.join('\n');
 }
 
 /* ---------- FICHA UNIFICADA ---------- */
@@ -438,7 +695,6 @@ function abrirFichaDaLinha(linha, tipo) {
 function abrirFicha(pKey) {
   const p = store.getPaciente(pKey);
   if (!p) return;
-  fichaAtual = pKey;
   resumoAtual = pKey;
   const extras = store.extrasDe(pKey);
   const appCfg = store.appConfig;
@@ -458,6 +714,29 @@ function abrirFicha(pKey) {
 
   const cirurgiasHtml = p.cirurgiaRows
     .map((c) => {
+      const iso = parseDataPt(c.data);
+      const futura = iso && difDias(iso) >= 0;
+      if (futura) {
+        const dd = difDias(iso);
+        const feitos = extras.exames.filter((e) => e.feito).length;
+        return `<div class="ficha-cirurgia">
+          <div class="ficha-cirurgia-topo">
+            <strong>${esc(c.cirurgia || 'cirurgia')}</strong>
+            <span class="celula-sub">${esc(c.data)}${c.hospital ? ' · ' + esc(c.hospital) : ''} · <b style="color:var(--azul-escuro)">${dd === 0 ? 'é hoje' : 'faltam ' + dd + ' dias'}</b></span>
+          </div>
+          <div class="celula-sub" style="margin-bottom:8px">exames: ${feitos} de ${extras.exames.length}</div>
+          <div class="lista-exames">${extras.exames
+            .map(
+              (e, i) => `<div class="exame ${e.feito ? 'feito' : ''}" data-exame="${i}">
+                <div class="caixa"></div><span>${esc(e.nome)}</span>
+                <button class="remover" data-rem-exame="${i}">×</button>
+              </div>`,
+            )
+            .join('')}
+          </div>
+          <div class="add-exame"><input class="campo" id="ficha-add-exame" placeholder="adicionar exame (Enter)"></div>
+        </div>`;
+      }
       const marcos = store.marcosDe(c);
       const trilho = marcos
         .map(
@@ -487,10 +766,14 @@ function abrirFicha(pKey) {
     .join('');
 
   const temOverride = Boolean(appCfg.overrides[pKey]?.length);
+  const primeiraPosOp = p.cirurgiaRows.find((c) => {
+    const iso = parseDataPt(c.data);
+    return !iso || difDias(iso) < 0;
+  });
   const marcosBase = temOverride
     ? appCfg.overrides[pKey]
-    : p.cirurgiaRows.length
-      ? marcosEfetivos(p.cirurgiaRows[0], appCfg, pKey, extras).map(({ id, label, dias, col }) => ({ id, label, dias, col }))
+    : primeiraPosOp
+      ? store.marcosDe(primeiraPosOp).map(({ id, label, dias, col }) => ({ id, label, dias, col }))
       : [];
 
   const tplOptions = appCfg.templates
@@ -508,13 +791,13 @@ function abrirFicha(pKey) {
         ${p.recallRows.length ? 'recall' : ''}${p.recallRows.length && p.cirurgiaRows.length ? ' + ' : ''}${p.cirurgiaRows.length ? p.cirurgiaRows.length + ' cirurgia(s)' : ''}</div></div>
     </div>
     <div class="ficha-acoes">
-      ${waBtn(p.telefone, waMsgRecall(p.nome), 'WhatsApp')}
+      ${p.telefone ? `<button type="button" class="btn btn-wa" data-wa="${esc(buildWhatsAppLink(p.telefone, waMsgRecall(p.nome)))}">WhatsApp</button>` : ''}
       <button type="button" class="btn btn-gemini" id="btn-ficha-resumir">✨ Resumir com Gemini</button>
     </div>
     ${p.recallRows.length ? `<div class="ficha-secao"><h4>recall</h4>${recallHtml}</div>` : ''}
-    ${p.cirurgiaRows.length ? `<div class="ficha-secao"><h4>cirurgias e retornos</h4>${cirurgiasHtml}</div>` : ''}
-    ${p.cirurgiaRows.length
-      ? `<div class="ficha-secao"><h4>prazos de acompanhamento</h4>
+    ${p.cirurgiaRows.length ? `<div class="ficha-secao"><h4>cirurgias e revisões</h4>${cirurgiasHtml}</div>` : ''}
+    ${marcosBase.length
+      ? `<div class="ficha-secao"><h4>prazos de revisão</h4>
         <div class="linha-campos" style="align-items:center">
           <div class="campo-grupo" style="flex:1"><label>template do procedimento</label>
             <select class="campo" id="ficha-tpl">${tplOptions}</select></div>
@@ -540,7 +823,6 @@ function abrirFicha(pKey) {
       <button class="btn btn-azul" id="btn-ficha-fechar">fechar</button>
     </div>`;
 
-  // binds
   $('#btn-ficha-fechar')?.addEventListener('click', () => fechar('veu-ficha'));
   $('#btn-ficha-resumir')?.addEventListener('click', () => gerarResumo(pKey));
   $('#conteudo-ficha').querySelectorAll('[data-contato]').forEach((b) =>
@@ -555,11 +837,35 @@ function abrirFicha(pKey) {
       const marco = c && store.marcosDe(c).find((m) => m.id === el.dataset.marco);
       if (marco) {
         store.setMarcoStatus(c, marco, el.value);
-        showToast('status atualizado');
+        showToast('status da revisão atualizado');
         abrirFicha(pKey);
       }
     }),
   );
+  $('#conteudo-ficha').querySelectorAll('[data-exame]').forEach((el) =>
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-rem-exame]')) return;
+      const i = +el.dataset.exame;
+      extras.exames[i].feito = !extras.exames[i].feito;
+      store.salvarExtras();
+      abrirFicha(pKey);
+    }),
+  );
+  $('#conteudo-ficha').querySelectorAll('[data-rem-exame]').forEach((el) =>
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      extras.exames.splice(+el.dataset.remExame, 1);
+      store.salvarExtras();
+      abrirFicha(pKey);
+    }),
+  );
+  $('#ficha-add-exame')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.value.trim()) {
+      extras.exames.push({ nome: e.target.value.trim(), feito: false });
+      store.salvarExtras();
+      abrirFicha(pKey);
+    }
+  });
   $('#ficha-tpl')?.addEventListener('change', (e) => {
     const tplId = e.target.value;
     const padrao = store.appConfig.templates.find((t) => t.padrao)?.id;
@@ -593,7 +899,7 @@ function abrirFicha(pKey) {
   abrir('veu-ficha');
 }
 
-/* ---------- REGISTRAR CONTATO (escreve na planilha Recall) ---------- */
+/* ---------- REGISTRAR CONTATO ---------- */
 
 function abrirContato(recallKey) {
   const r = store.getRecallRow(recallKey);
@@ -630,7 +936,7 @@ function salvarContato() {
   showToast('contato salvo na planilha');
 }
 
-/* ---------- RESUMO ✨ ---------- */
+/* ---------- RESUMO ✨ (paciente) ---------- */
 
 async function gerarResumo(pKey) {
   const p = store.getPaciente(pKey || resumoAtual || '');
@@ -676,7 +982,7 @@ function bindResumoModal() {
   $('#btn-resumo-fechar')?.addEventListener('click', () => fechar('veu-resumo'));
 }
 
-/* ---------- EXPORT XLSX ---------- */
+/* ---------- EXPORT / CONFIG / BUSCA ---------- */
 
 function exportarDados() {
   showLoadingToast('gerando XLSX…');
@@ -691,8 +997,6 @@ function exportarDados() {
     showToast('erro: ' + (e.message || 'exportação falhou'));
   }
 }
-
-/* ---------- CONFIG / CONEXÃO ---------- */
 
 function bindConfigModal() {
   $('#cfg-webapp').value = store.config.webAppUrl || '';
@@ -750,17 +1054,15 @@ function bindConfigModal() {
 function atualizarLinksPlanilhas() {
   const br = $('#btn-abrir-recall');
   const bc = $('#btn-abrir-cirurgias');
-  if (store.config.recallSheetUrl) {
+  if (store.config.recallSheetUrl && br) {
     br.style.display = 'inline-flex';
     br.onclick = () => window.open(store.config.recallSheetUrl, '_blank');
   }
-  if (store.config.cirurgiasSheetUrl) {
+  if (store.config.cirurgiasSheetUrl && bc) {
     bc.style.display = 'inline-flex';
     bc.onclick = () => window.open(store.config.cirurgiasSheetUrl, '_blank');
   }
 }
-
-/* ---------- BUSCA ⌘K ---------- */
 
 function abrirBusca() {
   abrir('veu-busca');
@@ -777,10 +1079,7 @@ function renderizarBusca(termo) {
         .map((p, i) => {
           const cir = p.cirurgiaRows[0];
           const rec = p.recallRows[p.recallRows.length - 1];
-          const meta = [
-            cir ? `cirurgia ${cir.data}` : '',
-            rec ? `recall: ${rec.status || '—'}` : '',
-          ]
+          const meta = [cir ? `cirurgia ${cir.data}` : '', rec ? `recall: ${rec.status || '—'}` : '']
             .filter(Boolean)
             .join(' · ');
           return `
@@ -801,16 +1100,7 @@ function renderizarBusca(termo) {
   );
 }
 
-/* ---------- navegação / modais ---------- */
-
-function irPara(tela) {
-  store.setActiveScreen(tela);
-  document.querySelectorAll('.tela').forEach((t) => t.classList.remove('ativa'));
-  $('#tela-' + tela).classList.add('ativa');
-  document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('ativo', b.dataset.tela === tela));
-  $('.principal').scrollTop = 0;
-  renderizarTudo();
-}
+/* ---------- modais ---------- */
 
 function abrir(id) {
   $('#' + id).classList.add('aberto');
@@ -831,9 +1121,58 @@ function initApp() {
     toast: showToast,
   });
 
-  document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => irPara(b.dataset.tela)));
-  $('#btn-alternar-cirurgias')?.addEventListener('click', () => irPara('grid-cirurgias'));
-  $('#btn-alternar-recall')?.addEventListener('click', () => irPara('grid-recall'));
+  // ver detalhes (planilhas ocultas)
+  [['recall', gridRecall], ['cirurgias', gridCirurgias]].forEach(([tipo, grid]) => {
+    const btn = $('#btn-det-' + tipo);
+    const det = $('#det-' + tipo);
+    btn?.addEventListener('click', () => {
+      detalhesAbertos[tipo] = !detalhesAbertos[tipo];
+      det.hidden = !detalhesAbertos[tipo];
+      btn.textContent = (detalhesAbertos[tipo] ? '▾ ocultar' : '▸ ver') + ` detalhes — planilha ${tipo === 'recall' ? 'Recall' : 'Cirurgias'} completa`;
+      if (detalhesAbertos[tipo]) grid.render();
+    });
+  });
+
+  // buscas dos blocos
+  $('#busca-recall')?.addEventListener('input', (e) => {
+    buscaRecall = e.target.value;
+    renderLinhasRecall();
+    $('#busca-recall').focus();
+  });
+  $('#busca-cirurgias')?.addEventListener('input', (e) => {
+    buscaCirurgias = e.target.value;
+    renderLinhasCirurgias();
+    $('#busca-cirurgias').focus();
+  });
+
+  // atenção do mês
+  $('#btn-atencao-mes')?.addEventListener('click', () => {
+    atencaoMes = !atencaoMes;
+    $('#btn-atencao-mes').classList.toggle('ativo', atencaoMes);
+    renderLinhasRecall();
+    renderLinhasCirurgias();
+    showToast(atencaoMes ? 'mostrando só quem precisa de atenção este mês' : 'mostrando todas');
+  });
+
+  // rodapé técnico
+  $('#btn-acompanhamentos')?.addEventListener('click', () => {
+    acompanhamentosScreen.render();
+    abrir('veu-acomp');
+  });
+  $('#btn-acomp-fechar')?.addEventListener('click', () => fechar('veu-acomp'));
+  $('#btn-config')?.addEventListener('click', () => abrir('veu-config'));
+
+  // topo
+  $('#btn-exportar')?.addEventListener('click', exportarDados);
+  $('#btn-gestao')?.addEventListener('click', abrirGestao);
+  $('#btn-gestao-fechar')?.addEventListener('click', () => fechar('veu-gestao'));
+  $('#btn-gestao-imprimir')?.addEventListener('click', () => window.print());
+  $('#btn-gestao-copiar')?.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(textoGestao());
+    showToast('relatório copiado — cole no WhatsApp da gestão');
+  });
+
+  $('#btn-salvar-contato')?.addEventListener('click', salvarContato);
 
   document.querySelectorAll('.veu').forEach((v) =>
     v.addEventListener('mousedown', (e) => {
@@ -848,39 +1187,9 @@ function initApp() {
       abrirBusca();
     }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
-      const tela = store.filters.tela;
-      if (tela === 'grid-recall') {
-        e.preventDefault();
-        gridRecall.focusBusca();
-      } else if (tela === 'grid-cirurgias') {
-        e.preventDefault();
-        gridCirurgias.focusBusca();
-      }
+      e.preventDefault();
+      $('#busca-recall')?.focus();
     }
-  });
-
-  $('#btn-hoje-recall')?.addEventListener('click', () => {
-    irPara('grid-recall');
-    store.adicionarLinha('recall');
-    gridRecall.render();
-  });
-  $('#btn-hoje-cirurgia')?.addEventListener('click', () => {
-    irPara('grid-cirurgias');
-    store.adicionarLinha('cirurgias', { data: fmtDataPlanilhaCirurgias(isoHoje()) });
-    gridCirurgias.render();
-  });
-  $('#btn-nova-cirurgia')?.addEventListener('click', () => {
-    irPara('grid-cirurgias');
-    store.adicionarLinha('cirurgias', { data: fmtDataPlanilhaCirurgias(somarDias(isoHoje(), 30)) });
-    gridCirurgias.render();
-  });
-
-  $('#btn-exportar')?.addEventListener('click', exportarDados);
-  $('#btn-config')?.addEventListener('click', () => abrir('veu-config'));
-  $('#btn-salvar-contato')?.addEventListener('click', salvarContato);
-  $('#fab-resumir')?.addEventListener('click', () => {
-    if (resumoAtual) gerarResumo(resumoAtual);
-    else abrirBusca();
   });
 
   const debouncedSearch = debounce((v) => renderizarBusca(v), 50);
@@ -907,7 +1216,7 @@ function initApp() {
   atualizarLinksPlanilhas();
   renderizarTudo();
 
-  if (syncService.configured || (store.config.webAppUrl && store.config.apiSecret)) {
+  if (store.config.webAppUrl && store.config.apiSecret) {
     syncService
       .configure(store.config)
       .then(() => summaryService.setSheetsApi(syncService.api))

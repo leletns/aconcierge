@@ -577,11 +577,21 @@ function geminiSummarize_(record) {
 
   if (!key) return { text: buildLocalSummary_(record), provider: 'local' };
 
-  var prompt =
-    'Você é a assistente da Helen, concierge médica da clínica blue. (cirurgia plástica, Dr. Rafael). ' +
-    'Gere um resumo claro em português brasileiro com estas seções:\n\n' +
-    'Resumo da Paciente\n• Nome\n• Procedimento / Cirurgia\n• Situação do recall\n• Retornos (marcos)\n• Próximo passo sugerido\n• Observações importantes\n\n' +
-    'Dados (JSON):\n' + JSON.stringify(record, null, 2);
+  var prompt;
+  if (record._tipo === 'gestao') {
+    // card de gestão: análise executiva curta a partir dos agregados calculados no app
+    prompt =
+      'Você é analista da clínica blue. (cirurgia plástica). A partir dos números agregados abaixo, ' +
+      'escreva UM parágrafo executivo (máx. 3 frases, português brasileiro, sem markdown) para a gestão: ' +
+      'destaque o principal ponto positivo, o principal gargalo e uma ação recomendada para a concierge.\n\n' +
+      JSON.stringify(record, null, 2);
+  } else {
+    prompt =
+      'Você é a assistente da Helen, concierge médica da clínica blue. (cirurgia plástica, Dr. Rafael). ' +
+      'Gere um resumo claro em português brasileiro com estas seções:\n\n' +
+      'Resumo da Paciente\n• Nome\n• Procedimento / Cirurgia\n• Situação do recall\n• Revisões (marcos)\n• Próximo passo sugerido\n• Observações importantes\n\n' +
+      'Dados (JSON):\n' + JSON.stringify(record, null, 2);
+  }
 
   var res = UrlFetchApp.fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key,
