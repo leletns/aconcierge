@@ -329,6 +329,10 @@ table.grade td.celula.editando{padding:3px;background:var(--papel);box-shadow:in
 .celula-vazia{color:var(--linha);font-style:normal}
 .celula-vencida{color:var(--coral);font-weight:600}
 .celula-hint{font-style:normal;font-weight:500;color:var(--tinta-suave);font-size:.72em}
+.celula-acoes{white-space:nowrap;vertical-align:middle}
+.celula-acoes .btn{margin:2px;padding:4px 8px;font-size:.72rem}
+tr.linha-vencida td{background:rgba(196,107,92,.06)}
+.grade-smart{margin-bottom:6px}
 .celula-nome-grade{font-weight:600}
 .celula-fone{display:flex;align-items:center;gap:7px}
 .wa-mini{

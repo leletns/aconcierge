@@ -60,29 +60,39 @@ O calendário da clínica é **America/Sao_Paulo** (Brasília).
 
 ---
 
-## 5. Planilha Recall — como deve aparecer
+## 5. Planilha Recall — VIVE DENTRO DO APP
 
-### No app
+Helen **quase nunca precisa abrir o Google Sheets**. A tela **planilha recall** é o espelho 1:1.
 
-- Menu **planilha recall**
-- Colunas: Paciente · Contato (WhatsApp) · Última Consulta · Data Agendada · Status · Motivo · Data do Contato · Próximo Contato · Observações
-- Clique na célula → edite → Enter → sync automático
-- **abrir no Google ↗** → deve abrir:  
-  `https://docs.google.com/spreadsheets/d/1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU/edit`
+### No app (uso diário)
 
-### Se o link estiver errado / vazio
+1. Sidebar → **planilha recall**
+2. Filtros inteligentes: **vencidos · hoje · próx. 7 dias · sem próximo contato**
+3. Clique na célula → edite → Enter (grava no Google sozinho)
+4. Coluna Contato → botão verde WhatsApp (com mensagem pronta)
+5. Coluna **ações** → **registrar** (atualiza Status / Data do Contato / Próximo / Obs) ou **ficha**
+6. **＋ nova linha** → paciente novo na planilha Recall real
 
-1. Sidebar → **conectar planilhas**
-2. Campo **URL da planilha Recall** → cole o link acima
-3. **conectar e sincronizar**
+### Botão "abrir no Google ↗"
 
-### Se a grade estiver vazia / “não mostra”
+Só para emergência / conferência. O link oficial é:  
+`https://docs.google.com/spreadsheets/d/1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU/edit`
 
-1. Confirme sync (bolinha verde “sincronizado”) na sidebar.
-2. Rode `fullSync`: desconecte/reconecte em **conectar planilhas**.
-3. No Apps Script, confira Script Properties:
-   - `RECALL_SHEET_ID` = `1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU`
-4. Cabeçalho da planilha Recall precisa estar na **linha 5** com coluna **PACIENTE**.
+### Se a grade estiver vazia
+
+1. Bolinha de sync deve mostrar `Recall N · Cirurgias M`
+2. **conectar planilhas** de novo (Web App URL + senha)
+3. Apps Script: cole o `Code.gs` atualizado e **reimplante**
+4. Script Properties: `RECALL_SHEET_ID` = `1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU`
+5. Cabeçalho da planilha deve estar na **linha 5** com **PACIENTE**
+
+### Cadastrar alguém novo (2–3 cliques)
+
+1. **hoje** → **＋ paciente no recall** **ou** planilha recall → **＋ nova paciente**
+2. Preenche: nome, WhatsApp, status, próximo contato
+3. **salvar na planilha** → aparece na grade e sobe sozinho para o Google Sheets
+
+Não precisa abrir o Google.
 
 ---
 

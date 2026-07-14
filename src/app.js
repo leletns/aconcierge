@@ -71,10 +71,73 @@ const gridRecall = new SpreadsheetGrid({
   colunas: RECALL_COLS,
   nomeField: 'nome',
   statusField: 'status',
+  dateField: 'proximoContato',
   getRows: () => store.recall,
   onEdit: (key, field, value) => store.editarCelula('recall', key, field, value),
-  onAddRow: () => store.adicionarLinha('recall'),
+  onAddRow: () => abrirNovaRecall(),
   onOpenFicha: (linha) => abrirFichaDaLinha(linha, 'recall'),
+  isConnected: () => syncService.configured,
+  waMessage: (linha) => waMsgRecall(linha.nome),
+  smartFilters: [
+    { id: 'todos', label: 'todas', test: () => true },
+    {
+      id: 'vencidos',
+      label: 'vencidos',
+      test: (r) => {
+        if (['Agendado', 'Sem interesse'].includes(r.status)) return false;
+        const dd = difDias(parseDataPt(r.proximoContato));
+        return dd !== null && dd < 0;
+      },
+    },
+    {
+      id: 'hoje',
+      label: 'hoje',
+      test: (r) => {
+        if (['Agendado', 'Sem interesse'].includes(r.status)) return false;
+        return difDias(parseDataPt(r.proximoContato)) === 0;
+      },
+    },
+    {
+      id: 'semana',
+      label: 'próx. 7 dias',
+      test: (r) => {
+        if (['Agendado', 'Sem interesse'].includes(r.status)) return false;
+        const dd = difDias(parseDataPt(r.proximoContato));
+        return dd !== null && dd >= 0 && dd <= 7;
+      },
+    },
+    {
+      id: 'sem-data',
+      label: 'sem próximo contato',
+      test: (r) => !parseDataPt(r.proximoContato) && !['Agendado', 'Sem interesse'].includes(r.status),
+    },
+  ],
+  rowActions: [
+    { id: 'registrar', label: 'registrar', onClick: (linha) => abrirContato(linha.key) },
+    {
+      id: 'ficha',
+      label: 'ficha',
+      onClick: (linha) => abrirFichaDaLinha(linha, 'recall'),
+    },
+  ],
+  emptyHint: ({ connected, total, filtrado }) => {
+    if (!connected) {
+      return {
+        titulo: 'conecte as planilhas',
+        sub: 'sidebar → conectar planilhas — a grade Recall aparece aqui, espelhada do Google',
+      };
+    }
+    if (total === 0) {
+      return {
+        titulo: 'planilha Recall vazia',
+        sub: 'adicione a primeira paciente com ＋ nova linha — grava direto no Google Sheets',
+      };
+    }
+    if (filtrado) {
+      return { titulo: 'nenhuma linha neste filtro', sub: 'limpe os filtros ou a busca' };
+    }
+    return { titulo: 'nenhuma linha', sub: 'ajuste a busca' };
+  },
 });
 
 const gridCirurgias = new SpreadsheetGrid({
@@ -231,7 +294,7 @@ function renderizarHoje() {
     });
 
   $('#grade-hoje').innerHTML =
-    bloco('recall para hoje', itensRec, 'fila limpa', 'nenhuma paciente aguardando contato hoje') +
+    bloco('recall para hoje', itensRec, 'fila limpa', 'nenhuma paciente com próximo contato para hoje — abra planilha recall para ver a fila completa') +
     bloco('retornos desta semana', itensRet, 'tudo em dia', 'nenhum retorno vencendo nos próximos 7 dias') +
     bloco('pré-op em atenção', itensPre, 'exames em dia', 'nenhuma cirurgia nos próximos 21 dias') +
     (store.temExemplos
@@ -610,6 +673,58 @@ function abrirFicha(pKey) {
   abrir('veu-ficha');
 }
 
+/* ---------- NOVA PACIENTE RECALL (poucos cliques) ---------- */
+
+function abrirNovaRecall() {
+  irPara('grid-recall');
+  $('#nr-nome').value = '';
+  $('#nr-fone').value = '';
+  $('#nr-status').value = 'Pendente';
+  $('#nr-ultima').value = '';
+  $('#nr-proxima').value = isoHoje();
+  $('#nr-obs').value = '';
+  abrir('veu-nova-recall');
+  setTimeout(() => $('#nr-nome')?.focus(), 60);
+}
+
+function salvarNovaRecall() {
+  const nome = $('#nr-nome').value.trim();
+  if (!nome) {
+    showToast('informe o nome da paciente');
+    $('#nr-nome')?.focus();
+    return;
+  }
+  const fone = $('#nr-fone').value.trim();
+  const status = $('#nr-status').value;
+  const ultima = $('#nr-ultima').value.trim();
+  const proxima = $('#nr-proxima').value;
+  const obs = $('#nr-obs').value.trim();
+
+  const linha = store.adicionarLinha('recall', {
+    nome,
+    contato: fone,
+    status,
+    ultimaConsulta: ultima,
+    proximoContato: proxima ? fmtDataPlanilhaRecall(proxima) : '',
+    dataContato: fmtDataPlanilhaRecall(isoHoje()),
+    obs,
+  });
+
+  fechar('veu-nova-recall');
+  gridRecall.render();
+  showToast(syncService.configured
+    ? `${nome} salva — enviando para o Google Sheets…`
+    : `${nome} salva localmente — conecte as planilhas para sincronizar`);
+
+  // destaca a linha nova abrindo o editor do telefone se vazio
+  if (!fone) {
+    setTimeout(() => {
+      const td = gridRecall.o.el?.querySelector(`tr[data-row="${linha.key}"] td[data-field="contato"]`);
+      if (td) gridRecall.abrirEditor(td);
+    }, 80);
+  }
+}
+
 /* ---------- REGISTRAR CONTATO (escreve na planilha Recall) ---------- */
 
 function abrirContato(recallKey) {
@@ -636,7 +751,11 @@ function salvarContato() {
   store.editarCelula('recall', r.key, 'dataContato', fmtDataPlanilhaRecall(isoHoje()));
   if (proxima) store.editarCelula('recall', r.key, 'proximoContato', fmtDataPlanilhaRecall(proxima));
   if (agendada) store.editarCelula('recall', r.key, 'dataAgendada', fmtDataPlanilhaRecall(agendada));
-  if (nota) store.editarCelula('recall', r.key, 'obs', nota);
+  if (nota) {
+    const previa = String(r.obs || '').trim();
+    const carimbo = `${fmtDataPlanilhaRecall(isoHoje())} (${canal}): ${nota}`;
+    store.editarCelula('recall', r.key, 'obs', previa ? `${previa}\n${carimbo}` : carimbo);
+  }
 
   const p = store.pacienteDaLinha(r, 'recall');
   if (p) {
@@ -644,7 +763,11 @@ function salvarContato() {
     store.salvarExtras();
   }
   fechar('veu-contato');
-  showToast('contato salvo na planilha');
+  const avisoMotivo =
+    (status === 'Sem interesse' || status === 'Não agendou') && !r.motivoRecusa
+      ? ' · preencha Motivo da Recusa na grade se souber'
+      : '';
+  showToast('contato salvo na planilha Recall' + avisoMotivo);
 }
 
 /* ---------- RESUMO ✨ ---------- */
@@ -754,7 +877,9 @@ function bindConfigModal() {
       summaryService.setSheetsApi(syncService.api);
       atualizarLinksPlanilhas();
       fechar('veu-config');
-      showToast('planilhas conectadas — sync automático ativo');
+      showToast(syncService.configured
+      ? `planilhas OK — Recall ${(syncService.lastHealth?.recall?.rows) ?? '…'} linhas (cabeçalho L${syncService.lastHealth?.recall?.headerRow || 5})`
+      : 'planilhas conectadas — sync automático ativo');
     } catch (e) {
       showToast('erro: ' + e.message);
     } finally {
@@ -880,10 +1005,14 @@ function initApp() {
     }
   });
 
-  $('#btn-hoje-recall')?.addEventListener('click', () => {
-    irPara('grid-recall');
-    store.adicionarLinha('recall');
-    gridRecall.render();
+  $('#btn-hoje-recall')?.addEventListener('click', () => abrirNovaRecall());
+  $('#btn-nova-recall-topo')?.addEventListener('click', () => abrirNovaRecall());
+  $('#btn-salvar-nova-recall')?.addEventListener('click', () => salvarNovaRecall());
+  $('#nr-nome')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('#nr-fone')?.focus();
+  });
+  $('#nr-fone')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') salvarNovaRecall();
   });
   $('#btn-hoje-cirurgia')?.addEventListener('click', () => {
     irPara('grid-cirurgias');

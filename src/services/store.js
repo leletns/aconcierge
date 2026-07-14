@@ -297,19 +297,38 @@ export class Store {
       .map(({ c }) => c);
   }
 
-  /** recalls com próximo contato vencido/hoje */
+  /** recalls com próximo contato vencido/hoje — só usa proximoContato (não dataContato) */
   recallsVencidos() {
     return this.dados.recall
       .filter((r) => {
         if (['Agendado', 'Sem interesse'].includes(r.status)) return false;
-        const prox = parseDataPt(r.proximoContato) || parseDataPt(r.dataContato);
-        return prox && difDias(prox) <= 0;
+        const prox = parseDataPt(r.proximoContato);
+        if (!prox) return false;
+        return difDias(prox) <= 0;
       })
       .sort((a, b) => {
-        const da = difDias(parseDataPt(a.proximoContato) || parseDataPt(a.dataContato)) ?? 999;
-        const db = difDias(parseDataPt(b.proximoContato) || parseDataPt(b.dataContato)) ?? 999;
+        const da = difDias(parseDataPt(a.proximoContato)) ?? 999;
+        const db = difDias(parseDataPt(b.proximoContato)) ?? 999;
         return da - db;
       });
+  }
+
+  /** recalls que precisam de atenção nos próximos N dias (inclui sem data = pendente de contato) */
+  recallsFila(opts = {}) {
+    const { modo = 'todos' } = opts;
+    return this.dados.recall.filter((r) => {
+      if (modo === 'todos') return true;
+      if (['Agendado', 'Sem interesse'].includes(r.status) && modo !== 'status') {
+        if (modo === 'vencidos' || modo === 'hoje' || modo === 'semana') return false;
+      }
+      const prox = parseDataPt(r.proximoContato);
+      const dd = prox ? difDias(prox) : null;
+      if (modo === 'vencidos') return dd !== null && dd < 0;
+      if (modo === 'hoje') return dd === 0;
+      if (modo === 'semana') return dd !== null && dd >= 0 && dd <= 7;
+      if (modo === 'sem-data') return !prox && !['Agendado', 'Sem interesse'].includes(r.status);
+      return true;
+    });
   }
 
   search(termo, limit = 8) {

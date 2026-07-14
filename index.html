@@ -77,12 +77,13 @@
       <div class="cabecalho">
         <div>
           <h1>planilha recall<span class="ponto">.</span></h1>
-          <div class="sub">GESTÃO DE RECALL — PACIENTES · edição direta, sincroniza com o Google Sheets</div>
+          <div class="sub">espelho da GESTÃO DE RECALL — edite aqui, sincroniza sozinho · não precisa abrir o Google</div>
         </div>
         <div class="acoes-cabecalho">
           <button class="btn btn-claro" id="btn-alternar-cirurgias" type="button">
             ⇄ planilha cirurgias
           </button>
+          <button class="btn btn-azul" id="btn-nova-recall-topo" type="button">＋ nova paciente</button>
           <button class="btn btn-fantasma" id="btn-abrir-recall" type="button">abrir no Google ↗</button>
         </div>
       </div>
@@ -204,6 +205,37 @@
       <button class="btn btn-claro" id="btn-resumo-regenerar" type="button">regenerar</button>
       <button class="btn btn-claro" id="btn-resumo-notas" type="button">inserir em observações</button>
       <button class="btn btn-azul" id="btn-resumo-fechar" type="button">fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: nova paciente Recall (poucos cliques) ============ -->
+<div class="veu" id="veu-nova-recall">
+  <div class="modal">
+    <h3>nova paciente no recall<span class="ponto">.</span></h3>
+    <div class="modal-sub">grava direto na planilha GESTÃO DE RECALL · sync automático</div>
+    <div class="campo-grupo"><label>nome completo</label><input class="campo" id="nr-nome" placeholder="ex.: Mariana Duarte" autocomplete="name"></div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>WhatsApp</label><input class="campo" id="nr-fone" placeholder="21 99999-0000" inputmode="tel"></div>
+      <div class="campo-grupo"><label>status</label>
+        <select class="campo" id="nr-status">
+          <option>Pendente</option>
+          <option>Em Acompanhamento</option>
+          <option>Sem Resposta</option>
+          <option>Agendado</option>
+          <option>Não agendou</option>
+          <option>Sem interesse</option>
+        </select>
+      </div>
+    </div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>última consulta / procedimento</label><input class="campo" id="nr-ultima" placeholder="ex.: 10/11/2025 ou Botox"></div>
+      <div class="campo-grupo"><label>próximo contato</label><input class="campo" type="date" id="nr-proxima"></div>
+    </div>
+    <div class="campo-grupo"><label>observações (opcional)</label><textarea class="campo" id="nr-obs" rows="2" placeholder="anotações rápidas"></textarea></div>
+    <div class="modal-rodape">
+      <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-nova-recall').classList.remove('aberto')">cancelar</button>
+      <button class="btn btn-azul" id="btn-salvar-nova-recall" type="button">salvar na planilha</button>
     </div>
   </div>
 </div>

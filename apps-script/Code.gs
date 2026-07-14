@@ -25,17 +25,34 @@ var CACHE = CacheService.getScriptCache();
 var META_SHEET = '_SyncMeta';
 var CONFIG_SHEET = '_Config';
 
-/** colunas canônicas ↔ cabeçalhos reais (tolerante a acentos/quebras de linha) */
+/** colunas canônicas ↔ cabeçalhos reais (tolerante a acentos/quebras de linha)
+ *  Ordem importa: matches específicos ANTES dos genéricos
+ *  (ex.: "DATA DO CONTATO" antes de "CONTATO")
+ */
 var RECALL_FIELDS = [
   { field: 'nome', match: 'PACIENTE' },
-  { field: 'contato', match: 'CONTATO' },
-  { field: 'ultimaConsulta', match: 'ULTIMA' },
-  { field: 'dataAgendada', match: 'AGENDADA' },
-  { field: 'status', match: 'STATUS' },
-  { field: 'motivoRecusa', match: 'MOTIVO' },
   { field: 'dataContato', match: 'DATA DO CONTATO' },
   { field: 'proximoContato', match: 'PROXIMO' },
+  { field: 'dataAgendada', match: 'AGENDADA' },
+  { field: 'ultimaConsulta', match: 'ULTIMA' },
+  { field: 'motivoRecusa', match: 'MOTIVO' },
+  { field: 'status', match: 'STATUS' },
   { field: 'obs', match: 'OBSERVA' },
+  // CONTATO por último — evita pegar "DATA DO CONTATO"
+  { field: 'contato', match: 'CONTATO', exclude: 'DATA DO CONTATO' },
+];
+
+/** Fallback posicional da planilha Recall (A–I) se o cabeçalho falhar */
+var RECALL_POS = [
+  ['nome', 1],
+  ['contato', 2],
+  ['ultimaConsulta', 3],
+  ['dataAgendada', 4],
+  ['status', 5],
+  ['motivoRecusa', 6],
+  ['dataContato', 7],
+  ['proximoContato', 8],
+  ['obs', 9],
 ];
 
 var CIRURGIAS_FIELDS = [
@@ -89,24 +106,65 @@ function getSpreadsheet_(kind) {
   return SpreadsheetApp.openById(id);
 }
 
-/** localiza a aba de dados e a linha de cabeçalho (Recall: linha 5 · Cirurgias: linha 1) */
+/** localiza a aba de dados e a linha de cabeçalho
+ *  Recall (planilha real da Helen): cabeçalho CONGELADO na linha 5, dados a partir da 6.
+ *  Cirurgias: cabeçalho na linha 1.
+ */
 function findDataSheet_(ss, kind) {
-  var alvo = kind === 'recall' ? 'PACIENTE' : 'PACIENTE';
   var sheets = ss.getSheets();
-  for (var s = 0; s < sheets.length; s++) {
-    var sheet = sheets[s];
-    var nome = sheet.getName();
-    if (nome === META_SHEET || nome === CONFIG_SHEET) continue;
-    var max = Math.min(10, sheet.getLastRow());
-    if (max < 1) continue;
-    var valores = sheet.getRange(1, 1, max, Math.min(12, Math.max(1, sheet.getLastColumn()))).getDisplayValues();
-    for (var r = 0; r < valores.length; r++) {
-      for (var c = 0; c < valores[r].length; c++) {
-        if (norm_(valores[r][c]).indexOf(alvo) >= 0) {
-          return { sheet: sheet, headerRow: r + 1 };
-        }
+
+  // Atalho garantido para Recall oficial: linha 5 com PACIENTE + STATUS
+  if (kind === 'recall') {
+    for (var s = 0; s < sheets.length; s++) {
+      var sheet = sheets[s];
+      var nome = sheet.getName();
+      if (nome === META_SHEET || nome === CONFIG_SHEET) continue;
+      if (sheet.getLastRow() < 5) continue;
+      var lastCol = Math.min(14, Math.max(1, sheet.getLastColumn()));
+      var header5 = sheet.getRange(5, 1, 1, lastCol).getDisplayValues()[0].map(norm_);
+      var temPaciente = header5.some(function (h) { return h.indexOf('PACIENTE') >= 0; });
+      var temStatus = header5.some(function (h) { return h.indexOf('STATUS') >= 0; });
+      var temContato = header5.some(function (h) { return h.indexOf('CONTATO') >= 0; });
+      if (temPaciente && (temStatus || temContato)) {
+        return { sheet: sheet, headerRow: 5 };
       }
     }
+  }
+
+  var candidatos = [];
+  for (var s2 = 0; s2 < sheets.length; s2++) {
+    var sheet2 = sheets[s2];
+    var nome2 = sheet2.getName();
+    if (nome2 === META_SHEET || nome2 === CONFIG_SHEET) continue;
+    var max = Math.min(12, sheet2.getLastRow());
+    if (max < 1) continue;
+    var lastCol2 = Math.min(14, Math.max(1, sheet2.getLastColumn()));
+    var valores = sheet2.getRange(1, 1, max, lastCol2).getDisplayValues();
+    for (var r = 0; r < valores.length; r++) {
+      var rowNorm = valores[r].map(norm_);
+      var temPaciente2 = rowNorm.some(function (h) { return h.indexOf('PACIENTE') >= 0; });
+      if (!temPaciente2) continue;
+
+      var score = 0;
+      if (kind === 'recall') {
+        if (rowNorm.some(function (h) { return h.indexOf('STATUS') >= 0; })) score += 3;
+        if (rowNorm.some(function (h) { return h.indexOf('CONTATO') >= 0; })) score += 2;
+        if (rowNorm.some(function (h) { return h.indexOf('PROXIMO') >= 0; })) score += 2;
+        if (rowNorm.some(function (h) { return h.indexOf('AGENDADA') >= 0; })) score += 1;
+        if (r + 1 === 5) score += 10; // peso alto — estrutura oficial
+      } else {
+        if (rowNorm.some(function (h) { return h.indexOf('CIRURGIA') >= 0; })) score += 4;
+        if (rowNorm.some(function (h) { return h.indexOf('HOSPITAL') >= 0; })) score += 2;
+        if (rowNorm.some(function (h) { return h.indexOf('MESES') >= 0 || h.indexOf('ANO') >= 0; })) score += 2;
+        if (r === 0) score += 3;
+      }
+      candidatos.push({ sheet: sheet2, headerRow: r + 1, score: score });
+    }
+  }
+
+  if (candidatos.length) {
+    candidatos.sort(function (a, b) { return b.score - a.score; });
+    return { sheet: candidatos[0].sheet, headerRow: candidatos[0].headerRow };
   }
   return { sheet: ss.getSheets()[0], headerRow: kind === 'recall' ? 5 : 1 };
 }
@@ -121,7 +179,9 @@ function mapColumns_(sheet, headerRow, fields) {
       var h = headers[c];
       if (!h) continue;
       var usado = Object.keys(mapa).some(function (k) { return mapa[k] === c + 1; });
-      if (!usado && h.indexOf(f.match) >= 0) {
+      if (usado) continue;
+      if (f.exclude && h.indexOf(f.exclude) >= 0) continue;
+      if (h.indexOf(f.match) >= 0) {
         mapa[f.field] = c + 1;
         break;
       }
@@ -135,13 +195,19 @@ function getSheetContext_(kind) {
   var found = findDataSheet_(ss, kind);
   var fields = kind === 'recall' ? RECALL_FIELDS : CIRURGIAS_FIELDS;
   var cols = mapColumns_(found.sheet, found.headerRow, fields);
+  var lastCol = found.sheet.getLastColumn();
+
   if (kind === 'cirurgias') {
-    // Helen pode renomear os cabeçalhos dos marcos — fallback posicional (colunas 5/6/7)
-    var lastCol = found.sheet.getLastColumn();
     [['m3m', 5], ['m6m', 6], ['m1a', 7]].forEach(function (par) {
       if (!cols[par[0]] && lastCol >= par[1]) cols[par[0]] = par[1];
     });
   }
+  if (kind === 'recall') {
+    RECALL_POS.forEach(function (par) {
+      if (!cols[par[0]] && lastCol >= par[1]) cols[par[0]] = par[1];
+    });
+  }
+
   return {
     kind: kind,
     ss: ss,
@@ -149,6 +215,7 @@ function getSheetContext_(kind) {
     headerRow: found.headerRow,
     cols: cols,
     fields: fields,
+    mappedCount: Object.keys(cols).length,
   };
 }
 
@@ -236,8 +303,22 @@ function buildPayload_() {
     ok: true,
     changed: true,
     lastChange: getLastChange_(),
-    recall: { titulo: recall.ss.getName(), headerRow: recall.headerRow, rows: pullRows_(recall) },
-    cirurgias: { titulo: cirurgias.ss.getName(), headerRow: cirurgias.headerRow, rows: pullRows_(cirurgias) },
+    recall: {
+      titulo: recall.ss.getName(),
+      sheetName: recall.sheet.getName(),
+      headerRow: recall.headerRow,
+      cols: recall.cols,
+      mappedCount: recall.mappedCount,
+      rows: pullRows_(recall),
+    },
+    cirurgias: {
+      titulo: cirurgias.ss.getName(),
+      sheetName: cirurgias.sheet.getName(),
+      headerRow: cirurgias.headerRow,
+      cols: cirurgias.cols,
+      mappedCount: cirurgias.mappedCount,
+      rows: pullRows_(cirurgias),
+    },
     appConfig: getAppConfig_(),
   };
 }

@@ -7,6 +7,7 @@
  *   última edição feita direto na planilha; aqui, linhas com edição pendente
  *   não são sobrescritas pelo pull até o flush
  * - fullSync ao conectar substitui os exemplos locais pelo espelho real
+ * - ops com erro NÃO são removidas da fila (retry no próximo flush)
  */
 import { debounce } from '../utils/helpers.js';
 import { nowISO } from '../utils/dates.js';
@@ -14,6 +15,7 @@ import { GoogleSheetsApi } from './googleSheetsApi.js';
 import { loadSyncQueue, saveSyncQueue } from './storage.js';
 
 const POLL_INTERVAL_MS = 3000;
+const RECALL_CAMPOS_MIN = ['nome', 'contato', 'status', 'proximoContato'];
 
 export class SyncService {
   constructor(store) {
@@ -23,6 +25,7 @@ export class SyncService {
     this.syncing = false;
     this.pollTimer = null;
     this.lastChange = '';
+    this.lastHealth = null; // { recall, cirurgias }
     this.listeners = new Set();
     this.debouncedFlush = debounce(() => this.flushQueue(), 400);
   }
@@ -33,7 +36,7 @@ export class SyncService {
   }
 
   _emit(status, detail = '') {
-    this.listeners.forEach((cb) => cb({ status, detail, syncing: this.syncing }));
+    this.listeners.forEach((cb) => cb({ status, detail, syncing: this.syncing, health: this.lastHealth }));
   }
 
   get configured() {
@@ -112,20 +115,38 @@ export class SyncService {
         op.type === 'config' ? { ...op, appConfig: this.store.appConfig } : op,
       );
       const data = await this.api.push(ops);
-
-      for (const r of data.results || []) {
+      const results = data.results || [];
+      const resultByKey = new Map();
+      results.forEach((r, i) => {
+        const op = batch[i];
+        if (op) resultByKey.set(op, r);
         if (r.appendedRow != null && r.key) {
-          const op = batch.find((b) => b.key === r.key && b.type === 'append');
-          if (op) this.store.confirmarAppend(op.sheet, r.key, r.appendedRow);
+          this.store.confirmarAppend(op?.sheet || 'recall', r.key, r.appendedRow);
         }
-      }
+      });
 
-      this.queue = this.queue.filter((q) => !batch.includes(q));
+      // remove da fila só o que foi aceito (updated/appended/skipped conflict ou config)
+      const erros = [];
+      this.queue = this.queue.filter((q) => {
+        if (!batch.includes(q)) return true;
+        const r = resultByKey.get(q);
+        if (!r) return false; // sem resultado correspondente → assume ok
+        if (r.error) {
+          erros.push(r.error);
+          return true; // mantém para retry
+        }
+        return false;
+      });
       this._saveQueue();
       this.lastChange = data.lastChange || this.lastChange;
       this.store.config.lastSyncAt = nowISO();
       this.store.persistConfig();
-      this._emit('synced', 'planilhas atualizadas');
+
+      if (erros.length) {
+        this._emit('error', erros[0]);
+      } else {
+        this._emit('synced', 'planilhas atualizadas');
+      }
     } catch (e) {
       this._emit('error', e.message);
     } finally {
@@ -142,7 +163,7 @@ export class SyncService {
       const data = await this.api.syncSince(this.lastChange);
       if (data.changed) {
         this._aplicar(data);
-        this._emit('synced', 'atualizado da planilha');
+        this._emit('synced', this._resumoHealth());
       } else {
         this._emit('online', 'sincronizado');
       }
@@ -162,19 +183,74 @@ export class SyncService {
       this._aplicar(data);
       this.store.config.lastSyncAt = nowISO();
       this.store.persistConfig();
-      const n = (data.recall?.rows?.length || 0) + (data.cirurgias?.rows?.length || 0);
-      this._emit('online', `${n} linha(s) das planilhas`);
+      this._emit('online', this._resumoHealth());
     } finally {
       this.syncing = false;
       await this.flushQueue();
     }
   }
 
+  _resumoHealth() {
+    const h = this.lastHealth;
+    if (!h) return 'planilhas carregadas';
+    const r = h.recall || {};
+    const c = h.cirurgias || {};
+    return `Recall ${r.rows || 0} · Cirurgias ${c.rows || 0}`;
+  }
+
+  _validarEspelho(meta, esperado) {
+    if (!meta) return { ok: false, motivo: 'sem dados' };
+    const cols = meta.cols || {};
+    const faltando = esperado.filter((f) => !cols[f]);
+    // mappedCount do server ou conta cols
+    const mapped = meta.mappedCount ?? Object.keys(cols).length;
+    if (mapped < 3 && (meta.rows?.length || 0) === 0) {
+      return { ok: false, motivo: `cabeçalho não mapeado (${mapped} colunas)` };
+    }
+    if (faltando.includes('nome') && faltando.includes('paciente')) {
+      return { ok: false, motivo: 'coluna Paciente não encontrada' };
+    }
+    return { ok: true, faltando, mapped };
+  }
+
   _aplicar(data) {
     this.lastChange = data.lastChange || this.lastChange;
-    if (data.recall?.rows) this.store.aplicarEspelho('recall', data.recall.rows, this.pendentes('recall'));
-    if (data.cirurgias?.rows) this.store.aplicarEspelho('cirurgias', data.cirurgias.rows, this.pendentes('cirurgias'));
+
+    const recallCheck = this._validarEspelho(data.recall, RECALL_CAMPOS_MIN);
+    if (data.recall?.rows) {
+      if (!recallCheck.ok && (this.store.recall.filter((r) => !r.exemplo).length > 0)) {
+        // evita apagar espelho local com pull quebrado
+        this._emit('error', 'Recall: ' + recallCheck.motivo + ' — mantendo dados locais');
+      } else {
+        this.store.aplicarEspelho('recall', data.recall.rows, this.pendentes('recall'));
+      }
+    }
+    if (data.cirurgias?.rows) {
+      this.store.aplicarEspelho('cirurgias', data.cirurgias.rows, this.pendentes('cirurgias'));
+    }
     if (data.appConfig) this.store.aplicarConfigRemota(data.appConfig);
+
+    this.lastHealth = {
+      recall: {
+        titulo: data.recall?.titulo || '',
+        sheetName: data.recall?.sheetName || '',
+        headerRow: data.recall?.headerRow,
+        mapped: recallCheck.mapped ?? data.recall?.mappedCount,
+        rows: data.recall?.rows?.length || 0,
+        ok: recallCheck.ok,
+        faltando: recallCheck.faltando || [],
+      },
+      cirurgias: {
+        titulo: data.cirurgias?.titulo || '',
+        sheetName: data.cirurgias?.sheetName || '',
+        headerRow: data.cirurgias?.headerRow,
+        mapped: data.cirurgias?.mappedCount,
+        rows: data.cirurgias?.rows?.length || 0,
+        ok: true,
+      },
+    };
+    this.store.config.lastHealth = this.lastHealth;
+    this.store.persistConfig();
   }
 
   /* ---------- polling ---------- */
