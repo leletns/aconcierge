@@ -13,10 +13,17 @@ import {
   parseDataPt,
   fmtDataPlanilhaRecall,
   fmtDataPlanilhaCirurgias,
+  hojeLabelLonga,
+  TZ_CLINICA,
 } from './utils/dates.js';
 import { parsePhone, formatPhoneDisplay, buildWhatsAppLink } from './utils/phone.js';
 import { patientKey } from './utils/matching.js';
 import { marcosEfetivos, estadoMarco, proximoMarco, templateParaCirurgia } from './utils/templates.js';
+import { protocoloParaCirurgia, OBSERVACOES_PREOP } from './utils/preopProtocol.js';
+import {
+  DEFAULT_RECALL_SHEET_URL,
+  DEFAULT_CIRURGIAS_SHEET_URL,
+} from './utils/constants.js';
 import { Store } from './services/store.js';
 import { SyncService } from './services/syncService.js';
 import { SummaryService, pacienteSnapshot } from './services/summaryService.js';
@@ -161,11 +168,7 @@ function renderizarHoje() {
   const h = new Date().getHours();
   const s = h < 12 ? 'bom dia' : h < 18 ? 'boa tarde' : 'boa noite';
   $('#saudacao').innerHTML = `${s}, Helen<span class="ponto">.</span>`;
-  $('#data-hoje').textContent = new Date().toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
+  $('#data-hoje').textContent = `${hojeLabelLonga()} · fuso ${TZ_CLINICA}`;
 
   const bloco = (titulo, itens, vazioTitulo, vazioSub) => `
     <div class="cartao bloco-hoje">
@@ -218,7 +221,7 @@ function renderizarHoje() {
     .map(({ c, iso }) => {
       const dd = difDias(iso);
       const p = store.pacienteDaLinha(c, 'cirurgias');
-      const extras = store.extrasDe(p ? p.key : patientKey(c.paciente));
+      const extras = store.extrasDe(p ? p.key : patientKey(c.paciente), c.cirurgia);
       const pend = extras.exames.filter((e) => !e.feito).length;
       const selo = dd <= 7 ? 'selo-coral' : dd <= 15 ? 'selo-ambar' : 'selo-azul';
       return `<div class="item-fila" data-nav="preop">
@@ -351,12 +354,17 @@ function renderizarRetornos() {
 function renderizarPreop() {
   const lista = store.cirurgiasFuturas();
   $('#grade-preop').innerHTML = lista.length
-    ? lista
+    ? `<div class="preop-protocolo-nota cartao" style="grid-column:1/-1">
+        <strong>Protocolo interno de exames pré-operatórios</strong>
+        <div class="celula-sub">Checklist automático conforme o tipo de cirurgia (Lipedema, Mama, Abdominoplastia, Lipo, Blefaro…). Marque cada exame ao concluir. Observações: ${OBSERVACOES_PREOP.map(esc).join(' · ')}</div>
+      </div>` +
+      lista
         .map(({ c, iso }) => {
           const dd = difDias(iso);
           const p = store.pacienteDaLinha(c, 'cirurgias');
           const pKey = p ? p.key : patientKey(c.paciente);
-          const extras = store.extrasDe(pKey);
+          const extras = store.extrasDe(pKey, c.cirurgia);
+          const proto = protocoloParaCirurgia(c.cirurgia);
           const feitos = extras.exames.filter((e) => e.feito).length;
           const total = extras.exames.length;
           const pct = total ? Math.round((feitos / total) * 100) : 0;
@@ -364,11 +372,12 @@ function renderizarPreop() {
           return `<div class="cartao cartao-preop">
         <div class="preop-topo">
           <div><div class="nome" data-ficha-cir="${c.key}">${esc(c.paciente)}</div>
-          <div class="proc">${esc(c.cirurgia || '—')} · ${esc(c.data)}${c.hospital ? ' · ' + esc(c.hospital) : ''}</div></div>
+          <div class="proc">${esc(c.cirurgia || '—')} · ${esc(c.data)}${c.hospital ? ' · ' + esc(c.hospital) : ''}</div>
+          <div class="celula-sub">protocolo: <strong>${esc(extras.protocoloNome || proto.nome)}</strong></div></div>
           <div class="contagem-regressiva"><div class="dias" style="color:${cor}">${dd === 0 ? 'hoje' : dd}</div>
           <div class="rotulo">${dd === 0 ? 'é o dia' : 'dias'}</div></div>
         </div>
-        <div class="legenda-exames"><span>exames</span><span>${feitos} de ${total}</span></div>
+        <div class="legenda-exames"><span>exames do protocolo</span><span>${feitos} de ${total}</span></div>
         <div class="barra-exames"><div style="width:${pct}%;background:${cor}"></div></div>
         <div class="lista-exames">${extras.exames
           .map(
@@ -382,6 +391,7 @@ function renderizarPreop() {
         </div>
         <div class="add-exame">
           <input class="campo add-exame-input" data-pk="${pKey}" placeholder="adicionar exame (Enter)">
+          <button class="btn btn-fantasma btn-mini btn-reaplicar-proto" data-pk="${pKey}" data-cir="${esc(c.cirurgia || '')}" type="button" title="Recarregar checklist do protocolo PDF">↺ protocolo</button>
         </div>
         <div class="preop-rodape">
           ${feitos === total ? '<span class="selo selo-verde">tudo pronto para a cirurgia</span>' : `<span class="selo ${dd <= 7 ? 'selo-coral' : dd <= 15 ? 'selo-ambar' : 'selo-azul'}">${total - feitos} pendente${total - feitos > 1 ? 's' : ''}</span>`}
@@ -390,7 +400,7 @@ function renderizarPreop() {
       </div>`;
         })
         .join('')
-    : `<div class="cartao bloco-hoje" style="grid-column:1/-1"><div class="vazio"><strong>nenhuma cirurgia marcada</strong>adicione uma linha na planilha cirurgias com data futura</div></div>`;
+    : `<div class="cartao bloco-hoje" style="grid-column:1/-1"><div class="vazio"><strong>nenhuma cirurgia marcada</strong>adicione uma linha na <em>planilha cirurgias</em> com data futura — o checklist do protocolo aparece sozinho</div></div>`;
 
   $('#grade-preop').querySelectorAll('[data-ficha-cir]').forEach((el) =>
     el.addEventListener('click', () => {
@@ -412,7 +422,8 @@ function renderizarPreop() {
       e.stopPropagation();
       const extras = store.extrasDe(el.dataset.pk);
       extras.exames.splice(+el.dataset.i, 1);
-      store.salvarExtras();
+      store.marcarExameCustom(el.dataset.pk);
+      showToast('exame removido');
     }),
   );
   $('#grade-preop').querySelectorAll('.add-exame-input').forEach((el) =>
@@ -420,9 +431,15 @@ function renderizarPreop() {
       if (e.key === 'Enter' && el.value.trim()) {
         const extras = store.extrasDe(el.dataset.pk);
         extras.exames.push({ nome: el.value.trim(), feito: false });
-        store.salvarExtras();
+        store.marcarExameCustom(el.dataset.pk);
         showToast('exame adicionado');
       }
+    }),
+  );
+  $('#grade-preop').querySelectorAll('.btn-reaplicar-proto').forEach((el) =>
+    el.addEventListener('click', () => {
+      const p = store.aplicarProtocoloPreop(el.dataset.pk, el.dataset.cir);
+      showToast(`protocolo ${p.protocoloNome} aplicado`);
     }),
   );
   bindWa($('#grade-preop'));
@@ -750,13 +767,17 @@ function bindConfigModal() {
 function atualizarLinksPlanilhas() {
   const br = $('#btn-abrir-recall');
   const bc = $('#btn-abrir-cirurgias');
-  if (store.config.recallSheetUrl) {
+  const urlR = store.config.recallSheetUrl || DEFAULT_RECALL_SHEET_URL;
+  const urlC = store.config.cirurgiasSheetUrl || DEFAULT_CIRURGIAS_SHEET_URL;
+  if (br) {
     br.style.display = 'inline-flex';
-    br.onclick = () => window.open(store.config.recallSheetUrl, '_blank');
+    br.onclick = () => window.open(urlR, '_blank', 'noopener');
+    br.title = urlR;
   }
-  if (store.config.cirurgiasSheetUrl) {
+  if (bc) {
     bc.style.display = 'inline-flex';
-    bc.onclick = () => window.open(store.config.cirurgiasSheetUrl, '_blank');
+    bc.onclick = () => window.open(urlC, '_blank', 'noopener');
+    bc.title = urlC;
   }
 }
 

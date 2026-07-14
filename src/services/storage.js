@@ -1,4 +1,10 @@
-import { STORAGE_KEY, CONFIG_KEY, QUEUE_KEY } from '../utils/constants.js';
+import {
+  STORAGE_KEY,
+  CONFIG_KEY,
+  QUEUE_KEY,
+  DEFAULT_RECALL_SHEET_URL,
+  DEFAULT_CIRURGIAS_SHEET_URL,
+} from '../utils/constants.js';
 import { semearExemplos } from '../utils/rowModel.js';
 import { templatesPadrao } from '../utils/templates.js';
 
@@ -68,8 +74,10 @@ export function loadConfig() {
   cfg.webAppUrl = cfg.webAppUrl || env.VITE_SHEETS_WEBAPP_URL || '';
   cfg.apiSecret = cfg.apiSecret || env.VITE_SHEETS_API_SECRET || '';
   cfg.geminiApiKey = cfg.geminiApiKey || env.VITE_GEMINI_API_KEY || '';
-  cfg.recallSheetUrl = cfg.recallSheetUrl || env.VITE_SPREADSHEET_URL_RECALL || '';
-  cfg.cirurgiasSheetUrl = cfg.cirurgiasSheetUrl || env.VITE_SPREADSHEET_URL_CIRURGIAS || '';
+  cfg.recallSheetUrl =
+    cfg.recallSheetUrl || env.VITE_SPREADSHEET_URL_RECALL || DEFAULT_RECALL_SHEET_URL;
+  cfg.cirurgiasSheetUrl =
+    cfg.cirurgiasSheetUrl || env.VITE_SPREADSHEET_URL_CIRURGIAS || DEFAULT_CIRURGIAS_SHEET_URL;
   cfg.lastSyncAt = cfg.lastSyncAt || '';
   const ac = cfg.appConfig || {};
   cfg.appConfig = {

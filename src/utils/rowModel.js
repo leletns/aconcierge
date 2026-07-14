@@ -3,8 +3,8 @@
  * linha real do Google Sheets. `row` é o número da linha na planilha
  * (null enquanto ainda não foi enviada); `key` é o id local estável.
  */
-import { EXAMES_PADRAO } from './constants.js';
 import { nowISO, isoHoje, somarDias, fmtDataPlanilhaCirurgias, fmtDataPlanilhaRecall } from './dates.js';
+import { EXAMES_GENERICOS, examesDoProtocolo } from './preopProtocol.js';
 
 export const rowUid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -44,9 +44,19 @@ export function novaLinhaCirurgia(base = {}) {
   };
 }
 
-export function novoExtras() {
+/**
+ * extras app-only por paciente.
+ * Se `cirurgiaTexto` for passado, aplica o protocolo de exames do PDF.
+ */
+export function novoExtras(cirurgiaTexto = '') {
+  const base = cirurgiaTexto
+    ? examesDoProtocolo(cirurgiaTexto)
+    : { protocoloId: 'generico', protocoloNome: 'Pré-op geral', exames: EXAMES_GENERICOS.map((n) => ({ nome: n, feito: false })) };
   return {
-    exames: EXAMES_PADRAO.map((n) => ({ nome: n, feito: false })),
+    exames: base.exames,
+    protocoloId: base.protocoloId,
+    protocoloNome: base.protocoloNome,
+    examesCustom: false,
     historico: [],
     marcoStatus: {},
   };
@@ -91,8 +101,15 @@ export function semearExemplos() {
       novaLinhaCirurgia({
         data: fmtDataPlanilhaCirurgias(somarDias(d, 12)),
         paciente: 'Paciente Exemplo Pré-Op',
-        cirurgia: 'Mastopexia com implante',
+        cirurgia: 'Lipedema MMII + Argoplasma',
         hospital: 'Barra D’or',
+        exemplo: true,
+      }),
+      novaLinhaCirurgia({
+        data: fmtDataPlanilhaCirurgias(somarDias(d, 20)),
+        paciente: 'Exemplo Mama Pré-Op',
+        cirurgia: 'Mastopexia com implante',
+        hospital: 'Perinatal',
         exemplo: true,
       }),
     ],

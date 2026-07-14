@@ -199,6 +199,9 @@ select.mini{width:auto;padding:6px 28px 6px 10px;font-size:.76rem;font-weight:50
 /* ---------- pré-op ---------- */
 .grade-preop{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}
 .cartao-preop{padding:20px 22px}
+.preop-protocolo-nota{padding:14px 18px;margin-bottom:4px;background:var(--azul-fundo)}
+.preop-protocolo-nota strong{display:block;font-size:.85rem;color:var(--azul-escuro);margin-bottom:4px}
+.preop-protocolo-nota .celula-sub{font-size:.72rem;line-height:1.45}
 .preop-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
 .preop-topo .nome{font-weight:600;font-size:.95rem;cursor:pointer}
 .preop-topo .nome:hover{color:var(--azul-escuro)}
@@ -325,6 +328,7 @@ table.grade td.celula.editando{padding:3px;background:var(--papel);box-shadow:in
 .celula-texto{font-size:.83rem}
 .celula-vazia{color:var(--linha);font-style:normal}
 .celula-vencida{color:var(--coral);font-weight:600}
+.celula-hint{font-style:normal;font-weight:500;color:var(--tinta-suave);font-size:.72em}
 .celula-nome-grade{font-weight:600}
 .celula-fone{display:flex;align-items:center;gap:7px}
 .wa-mini{

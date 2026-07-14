@@ -13,6 +13,7 @@ import { novaLinhaRecall, novaLinhaCirurgia, novoExtras } from '../utils/rowMode
 import { unificarPacientes, patientKey, normalizeNome } from '../utils/matching.js';
 import { marcosEfetivos, proximoMarco, algumMarcoAtrasado, estadoMarco } from '../utils/templates.js';
 import { parseDataPt, difDias, nowISO } from '../utils/dates.js';
+import { examesDoProtocolo, podeAplicarProtocolo } from '../utils/preopProtocol.js';
 
 export class Store {
   constructor({ onChange } = {}) {
@@ -72,13 +73,43 @@ export class Store {
     return this.dados.cirurgias.find((c) => c.key === key) || null;
   }
 
-  extrasDe(pKey) {
-    if (!this.dados.extras[pKey]) this.dados.extras[pKey] = novoExtras();
+  /**
+   * extras da paciente. Se `cirurgiaTexto` for passado e ainda não houver checklist
+   * customizado, aplica automaticamente o protocolo de exames do PDF.
+   */
+  extrasDe(pKey, cirurgiaTexto = '') {
+    if (!this.dados.extras[pKey]) this.dados.extras[pKey] = novoExtras(cirurgiaTexto);
     const e = this.dados.extras[pKey];
-    if (!e.exames) e.exames = novoExtras().exames;
+    if (!e.exames) e.exames = novoExtras(cirurgiaTexto).exames;
     if (!e.historico) e.historico = [];
     if (!e.marcoStatus) e.marcoStatus = {};
+
+    if (cirurgiaTexto && podeAplicarProtocolo(e, cirurgiaTexto)) {
+      const p = examesDoProtocolo(cirurgiaTexto);
+      e.exames = p.exames;
+      e.protocoloId = p.protocoloId;
+      e.protocoloNome = p.protocoloNome;
+      e.examesCustom = false;
+    }
     return e;
+  }
+
+  /** Reaplica o protocolo PDF (descarta checks) — Helen confirma na UI */
+  aplicarProtocoloPreop(pKey, cirurgiaTexto) {
+    const p = examesDoProtocolo(cirurgiaTexto);
+    const e = this.extrasDe(pKey);
+    e.exames = p.exames;
+    e.protocoloId = p.protocoloId;
+    e.protocoloNome = p.protocoloNome;
+    e.examesCustom = false;
+    this.salvarExtras();
+    return p;
+  }
+
+  marcarExameCustom(pKey) {
+    const e = this.extrasDe(pKey);
+    e.examesCustom = true;
+    this.salvarExtras();
   }
 
   /** marcos efetivos de uma linha de cirurgia */

@@ -18,4 +18,7 @@ Vite + vanilla JS SPA. Dependencies via npm (`package.json`). Legacy prototype: 
 
 ### Notes
 - Google Sheets sync requires deploying `apps-script/` to a real Google Spreadsheet; without credentials the app runs fully in localStorage mode.
+- Calendar math uses **America/Sao_Paulo** (`src/utils/dates.js`) so reminders do not shift ±1 day under UTC VMs.
+- Helen usage manual: `docs/MANUAL-HELEN.md`. Pre-op checklists: `src/utils/preopProtocol.js`.
 - No automated test suite; phone parser can be smoke-tested: `node --input-type=module -e "import {parsePhone} from './src/utils/phone.js'; console.log(parsePhone('21999999999'));"`
+- Date smoke test: `node --input-type=module -e "import {isoHoje,difDias} from './src/utils/dates.js'; console.log(isoHoje(), difDias(isoHoje()));"`

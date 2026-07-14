@@ -1,21 +1,40 @@
-export const hoje = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
+/**
+ * Datas em calendário America/Sao_Paulo (Brasil).
+ * Evita o clássico "um dia a menos" quando o Mac/browser está em UTC
+ * ou quando o Sheets interpreta Date em fuso errado.
+ */
+export const TZ_CLINICA = 'America/Sao_Paulo';
 
+/** yyyy-mm-dd de "hoje" no fuso da clínica (não no fuso do browser) */
 export const isoHoje = () => {
-  const d = hoje();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ_CLINICA,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch (_) {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
 };
 
+/** Date local (meia-noite) da data civil ISO — NUNCA use new Date("yyyy-mm-dd") */
 export const paraData = (iso) => {
   if (!iso) return null;
-  const [a, m, d] = String(iso).split('-').map(Number);
-  if (!a || !m || !d) return null;
-  return new Date(a, m - 1, d);
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const a = Number(m[1]);
+  const mes = Number(m[2]);
+  const d = Number(m[3]);
+  if (!a || !mes || !d) return null;
+  return new Date(a, mes - 1, d);
 };
+
+/** "hoje" civil no fuso da clínica, como Date local à meia-noite */
+export const hoje = () => paraData(isoHoje());
 
 export const fmt = (iso) => {
   const d = paraData(iso);
@@ -29,7 +48,7 @@ export const fmtLonga = (iso) => {
   return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-/** dd/MM/yyyy for export */
+/** dd/MM/yyyy for export / planilha Recall */
 export const fmtExportDate = (iso) => {
   const d = paraData(iso);
   if (!d) return '';
@@ -41,15 +60,17 @@ export const fmtExportDate = (iso) => {
 export const somarDias = (iso, n) => {
   const d = paraData(iso);
   if (!d) return '';
-  d.setDate(d.getDate() + n);
+  d.setDate(d.getDate() + (Number(n) || 0));
   const pad = (x) => String(x).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
+/** Diferença em dias civis: 0 = hoje, negativo = passado, positivo = futuro */
 export const difDias = (iso) => {
   const d = paraData(iso);
-  if (!d) return null;
-  return Math.round((d - hoje()) / 86400000);
+  const h = hoje();
+  if (!d || !h) return null;
+  return Math.round((d - h) / 86400000);
 };
 
 const MESES_PT = {
@@ -68,36 +89,42 @@ const MESES_PT = {
 };
 
 /**
- * Interpreta qualquer formato de data que aparece nas planilhas da Helen:
- *   "2026-01-05" · "05/01/2026" · "29/05//2026" · "29/05" (sem ano)
- *   "seg., 05 jan. 2026" · "Sex, 09 de Jan 2026" · "Sex 17 de Abril 2026" · "Ter, 19 de maio 2026"
+ * Interpreta qualquer formato de data das planilhas da Helen.
  * Retorna ISO yyyy-mm-dd ou '' quando não é data.
  */
 export const parseDataPt = (v) => {
   v = String(v || '').trim();
   if (!v) return '';
 
-  let m = v.match(/(\d{4})-(\d{2})-(\d{2})/);
+  // já ISO
+  let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
 
+  // dd/mm/yyyy (aceita // e -)
   m = v.match(/(\d{1,2})[/\-.]+(\d{1,2})[/\-.]+(\d{2,4})/);
   if (m) {
     const a = m[3].length === 2 ? '20' + m[3] : m[3];
     return `${a}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   }
 
-  // "05 jan. 2026" | "09 de Jan 2026" | "17 de Abril 2026"
+  // "05 jan. 2026" | "09 de Jan 2026" | "17 de Abril 2026" | "Sex, 09 de Jan 2026"
   m = v
     .toLowerCase()
-    .match(/(\d{1,2})\s*(?:de\s+)?([a-zç]{3,9})\.?\s*(?:de\s+)?(\d{4})/);
-  if (m && MESES_PT[m[2]]) {
-    return `${m[3]}-${String(MESES_PT[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .match(/(\d{1,2})\s*(?:de\s+)?([a-z]{3,9})\.?\s*(?:de\s+)?(\d{4})/);
+  if (m) {
+    const mesKey = m[2];
+    const mes = MESES_PT[mesKey] || MESES_PT[mesKey.slice(0, 3)];
+    if (mes) {
+      return `${m[3]}-${String(mes).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }
   }
 
-  // "29/05" sem ano → assume ano corrente
+  // "29/05" sem ano → ano civil da clínica
   m = v.match(/^(\d{1,2})[/\-.](\d{1,2})$/);
   if (m) {
-    return `${hoje().getFullYear()}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    return `${isoHoje().slice(0, 4)}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   }
 
   return '';
@@ -121,9 +148,31 @@ export const fmtDataPlanilhaCirurgias = (iso) => {
 export const fmtDataPlanilhaRecall = (iso) => fmtExportDate(iso);
 
 export const exportFilenameTimestamp = () => {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
+  // carimbo no fuso da clínica
+  const iso = isoHoje();
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TZ_CLINICA,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  const hh = parts.find((p) => p.type === 'hour')?.value || '00';
+  const mm = parts.find((p) => p.type === 'minute')?.value || '00';
+  return `${iso}_${hh}-${mm}`;
 };
 
 export const nowISO = () => new Date().toISOString();
+
+/** Rótulo longo de hoje no fuso da clínica (pt-BR) */
+export const hojeLabelLonga = () => {
+  try {
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: TZ_CLINICA,
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    }).format(new Date());
+  } catch (_) {
+    return fmtLonga(isoHoje());
+  }
+};

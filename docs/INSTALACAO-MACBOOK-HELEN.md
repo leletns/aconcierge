@@ -3,14 +3,26 @@
 O app roda no **Netlify** (um link). Toda a instalação acontece **no navegador** —
 nem você nem a Helen abrem terminal em lugar nenhum.
 
+**Manual de uso completo (telas, pré-op, fuso, troubleshooting):** [`MANUAL-HELEN.md`](./MANUAL-HELEN.md)
+
 ---
 
 ## O que a Helen vai ter
 
+<<<<<<< HEAD
 - **Um ícone no Dock** que abre o app já conectado.
 - Alterna **Planilha Recall ↔ Planilha Cirurgias** com 1 clique, mesma janela.
 - Sync automático bidirecional com as duas planilhas Google.
 - Ela **nunca** vê configuração, senha, URL — abre e usa.
+=======
+- **Um ícone no Dock** que abre o app blue.
+- **Um sistema só** — alterna entre "Planilha Recall" e "Planilha Cirurgias" **dentro do app**, com 1 clique (sem trocar de aba no Google).
+- Sync automático bidirecional com as duas planilhas Google: editou no app → planilha atualiza; editou na planilha → app atualiza em segundos.
+- Prazos de acompanhamento configuráveis (⚙ acompanhamentos) e personalizáveis por paciente.
+- Pré-op com **checklist do Protocolo Interno de Exames** (por tipo de cirurgia).
+- WhatsApp em 1 clique (números BR e internacionais), export XLSX, resumo ✨ com Gemini.
+- Datas e lembretes no fuso **America/Sao_Paulo** (Brasília).
+>>>>>>> fb5a1a8 (feat: manual Helen, fuso SP, pré-op do protocolo PDF, link Recall)
 
 ---
 
@@ -30,11 +42,36 @@ nem você nem a Helen abrem terminal em lugar nenhum.
 | `RECALL_SHEET_ID` | `1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU` |
 | `CIRURGIAS_SHEET_ID` | `1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI` |
 
+<<<<<<< HEAD
 4. No editor, selecione e **Execute**: `installTriggers` (obrigatório — é o que
    faz edição na planilha aparecer no app) e depois `beautifySheets`
    (visual: cabeçalho azul, zebra, cores por status — não muda nenhum valor).
    Autorize a conta Google quando pedir.
 5. **Implantar → Nova implantação → App da Web**
+=======
+# Clonar o projeto
+git clone https://github.com/leletns/aconcierge.git
+cd aconcierge
+git checkout main
+
+npm install
+npm run build
+```
+
+### 2. Google Apps Script (sync das 2 planilhas)
+
+1. Abrir a planilha **Cirurgias BLUE** no Google Sheets (pode ser qualquer uma das duas).
+2. **Extensões → Apps Script**.
+3. Apagar o conteúdo e colar o `apps-script/Code.gs` do projeto.
+4. **Configurações do projeto (⚙) → Propriedades do script**, adicionar:
+   - `SHEETS_API_SECRET` = uma senha longa (anotar — vai no app também)
+   - `GEMINI_API_KEY` = chave do Google AI Studio (para o ✨ Resumir; opcional)
+   - `RECALL_SHEET_ID` = `1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU`
+   - `CIRURGIAS_SHEET_ID` = `1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI`
+5. No editor, executar `installTriggers` e depois `beautifySheets` (autorizar a conta Google).
+   - `beautifySheets` só formata (cores, congela cabeçalho, filtros) — **não muda nenhum valor**.
+6. **Implantar → Nova implantação → App da Web**
+>>>>>>> fb5a1a8 (feat: manual Helen, fuso SP, pré-op do protocolo PDF, link Recall)
    - Executar como: **Eu** · Quem pode acessar: **Qualquer pessoa**
    - Copie a **URL do Web App** (termina em `/exec`).
 

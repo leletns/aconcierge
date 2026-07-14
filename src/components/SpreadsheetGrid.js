@@ -135,8 +135,14 @@ export class SpreadsheetGrid {
       const iso = parseDataPt(raw);
       const dd = iso ? difDias(iso) : null;
       const alerta = dd !== null && dd < 0 && (c.field === 'proximoContato' || c.field === 'dataAgendada');
+      let hint = '';
+      if (dd === 0) hint = ' · hoje';
+      else if (dd === 1) hint = ' · amanhã';
+      else if (dd === -1) hint = ' · ontem';
+      else if (dd != null && dd > 1 && dd <= 14) hint = ` · em ${dd}d`;
+      else if (dd != null && dd < -1 && Math.abs(dd) <= 30) hint = ` · há ${Math.abs(dd)}d`;
       conteudo = raw
-        ? `<span class="celula-texto ${alerta ? 'celula-vencida' : ''}">${esc(raw)}</span>`
+        ? `<span class="celula-texto ${alerta ? 'celula-vencida' : ''}">${esc(raw)}${hint ? `<em class="celula-hint">${hint}</em>` : ''}</span>`
         : '<i class="celula-vazia">—</i>';
     } else {
       const nomeCol = c.field === this.o.nomeField;

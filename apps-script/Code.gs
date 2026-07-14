@@ -281,6 +281,25 @@ function setAppConfig_(appConfig) {
 
 /* ================= escrita ================= */
 
+/**
+ * Escreve valor sem deslocar datas por fuso UTC.
+ * Datas (dd/mm/aaaa ou texto tipo "seg., 05 jan. 2026") vão como TEXTO puro.
+ */
+function setCellSafe_(range, value) {
+  var v = value == null ? '' : value;
+  var s = String(v);
+  var pareceData =
+    /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(s) ||
+    /^\d{4}-\d{2}-\d{2}/.test(s) ||
+    /\d{1,2}\s+(?:de\s+)?[a-zç.]{3,}/i.test(s);
+  if (pareceData) {
+    range.setNumberFormat('@');
+    range.setValue(s);
+  } else {
+    range.setValue(v);
+  }
+}
+
 function applyEdit_(op) {
   var ctx = getSheetContext_(op.sheet);
   var col = ctx.cols[op.field];
@@ -294,7 +313,7 @@ function applyEdit_(op) {
     return { key: op.key, skipped: true, reason: 'conflict' };
   }
 
-  ctx.sheet.getRange(row, col).setValue(op.value);
+  setCellSafe_(ctx.sheet.getRange(row, col), op.value);
   bumpLastChange_(ctx.ss, [row]);
   return { key: op.key, updated: true };
 }
@@ -308,7 +327,10 @@ function applyAppend_(op) {
     var col = ctx.cols[f.field];
     if (col && op.cells && op.cells[f.field] != null) linha[col - 1] = op.cells[f.field];
   });
-  ctx.sheet.getRange(row, 1, 1, lastCol).setValues([linha]);
+  // força texto nas colunas que parecem data, célula a célula (evita -1 dia UTC)
+  for (var c = 0; c < linha.length; c++) {
+    if (linha[c] !== '') setCellSafe_(ctx.sheet.getRange(row, c + 1), linha[c]);
+  }
   bumpLastChange_(ctx.ss, [row]);
   return { key: op.key, appendedRow: row };
 }
