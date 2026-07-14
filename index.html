@@ -42,6 +42,7 @@
           <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <input type="search" id="busca-recall" placeholder="buscar… (⌘F)">
         </div>
+        <button class="btn btn-azul" id="btn-nova-recall" type="button">＋ nova paciente</button>
       </div>
     </div>
     <div class="linhas cartao" id="linhas-recall"></div>
@@ -160,6 +161,37 @@
     <div class="tpl-lista" id="acompanhamentos-lista"></div>
     <div class="modal-rodape">
       <button class="btn btn-azul" id="btn-acomp-fechar" type="button">fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: nova paciente Recall (poucos cliques) ============ -->
+<div class="veu" id="veu-nova-recall">
+  <div class="modal">
+    <h3>nova paciente no recall<span class="ponto">.</span></h3>
+    <div class="modal-sub">grava direto na planilha GESTÃO DE RECALL · sync automático</div>
+    <div class="campo-grupo"><label>nome completo</label><input class="campo" id="nr-nome" placeholder="ex.: Mariana Duarte" autocomplete="name"></div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>WhatsApp</label><input class="campo" id="nr-fone" placeholder="21 99999-0000" inputmode="tel"></div>
+      <div class="campo-grupo"><label>status</label>
+        <select class="campo" id="nr-status">
+          <option>Pendente</option>
+          <option>Em Acompanhamento</option>
+          <option>Sem Resposta</option>
+          <option>Agendado</option>
+          <option>Não agendou</option>
+          <option>Sem interesse</option>
+        </select>
+      </div>
+    </div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>última consulta / procedimento</label><input class="campo" id="nr-ultima" placeholder="ex.: 10/11/2025 ou Botox"></div>
+      <div class="campo-grupo"><label>próximo contato</label><input class="campo" type="date" id="nr-proxima"></div>
+    </div>
+    <div class="campo-grupo"><label>observações (opcional)</label><textarea class="campo" id="nr-obs" rows="2" placeholder="anotações rápidas"></textarea></div>
+    <div class="modal-rodape">
+      <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-nova-recall').classList.remove('aberto')">cancelar</button>
+      <button class="btn btn-azul" id="btn-salvar-nova-recall" type="button">salvar na planilha</button>
     </div>
   </div>
 </div>

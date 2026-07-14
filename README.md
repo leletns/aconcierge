@@ -30,6 +30,8 @@ Para sincronizar com as planilhas reais: implantar `apps-script/Code.gs` e conec
 pela UI (**conectar planilhas**) ou via `.env` — passo a passo completo em
 [`docs/INSTALACAO-MACBOOK-HELEN.md`](docs/INSTALACAO-MACBOOK-HELEN.md).
 
+**Manual da Helen (uso diário):** [`docs/MANUAL-HELEN.md`](docs/MANUAL-HELEN.md)
+
 ## Funcionalidades
 
 | Feature | Descrição |

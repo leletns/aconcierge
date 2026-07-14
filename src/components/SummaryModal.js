@@ -9,17 +9,20 @@ export function renderSyncIndicator({ status, detail, syncing }) {
   if (!el) return;
 
   const labels = {
-    online: 'sync ativo',
+    online: detail || 'sync ativo',
     syncing: 'sincronizando…',
-    synced: 'sincronizado',
-    queued: 'na fila',
+    synced: detail || 'sincronizado',
+    queued: detail || 'na fila',
     error: 'erro de sync',
     offline: 'somente local',
   };
 
   el.className = 'sync-status ' + (status || 'offline');
   el.title = detail || '';
-  el.innerHTML = `<span class="sync-dot"></span><span>${labels[status] || status || 'local'}</span>`;
+  const texto = status === 'error' ? (detail ? `erro: ${detail}` : labels.error) : labels[status] || status || 'local';
+  // trunca para caber na sidebar
+  const curto = texto.length > 42 ? texto.slice(0, 40) + '…' : texto;
+  el.innerHTML = `<span class="sync-dot"></span><span>${curto}</span>`;
   if (syncing) el.classList.add('syncing');
 }
 

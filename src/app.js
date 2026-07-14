@@ -64,7 +64,7 @@ const gridRecall = new SpreadsheetGrid({
   statusField: 'status',
   getRows: () => store.recall,
   onEdit: (key, field, value) => store.editarCelula('recall', key, field, value),
-  onAddRow: () => store.adicionarLinha('recall'),
+  onAddRow: () => abrirNovaRecall(),
   onOpenFicha: (linha) => abrirFichaDaLinha(linha, 'recall'),
 });
 
@@ -718,13 +718,17 @@ function abrirFicha(pKey) {
       const futura = iso && difDias(iso) >= 0;
       if (futura) {
         const dd = difDias(iso);
+        store.extrasDe(pKey, c.cirurgia); // aplica o Protocolo Interno de Exames se ainda não customizado
         const feitos = extras.exames.filter((e) => e.feito).length;
         return `<div class="ficha-cirurgia">
           <div class="ficha-cirurgia-topo">
             <strong>${esc(c.cirurgia || 'cirurgia')}</strong>
             <span class="celula-sub">${esc(c.data)}${c.hospital ? ' · ' + esc(c.hospital) : ''} · <b style="color:var(--azul-escuro)">${dd === 0 ? 'é hoje' : 'faltam ' + dd + ' dias'}</b></span>
           </div>
-          <div class="celula-sub" style="margin-bottom:8px">exames: ${feitos} de ${extras.exames.length}</div>
+          <div class="celula-sub" style="margin-bottom:8px">
+            exames: ${feitos} de ${extras.exames.length} · protocolo: ${esc(extras.protocoloNome || 'genérico')}
+            <button type="button" class="btn btn-fantasma btn-mini" data-protocolo="${c.key}" title="reaplicar o checklist do Protocolo Interno de Exames (descarta alterações manuais)">↺ protocolo</button>
+          </div>
           <div class="lista-exames">${extras.exames
             .map(
               (e, i) => `<div class="exame ${e.feito ? 'feito' : ''}" data-exame="${i}">
@@ -855,17 +859,26 @@ function abrirFicha(pKey) {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       extras.exames.splice(+el.dataset.remExame, 1);
-      store.salvarExtras();
+      store.marcarExameCustom(pKey);
       abrirFicha(pKey);
     }),
   );
   $('#ficha-add-exame')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.value.trim()) {
       extras.exames.push({ nome: e.target.value.trim(), feito: false });
-      store.salvarExtras();
+      store.marcarExameCustom(pKey);
       abrirFicha(pKey);
     }
   });
+  $('#conteudo-ficha').querySelectorAll('[data-protocolo]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const c = store.getCirurgiaRow(el.dataset.protocolo);
+      if (!c) return;
+      const p = store.aplicarProtocoloPreop(pKey, c.cirurgia);
+      showToast(`protocolo aplicado: ${p.protocoloNome}`);
+      abrirFicha(pKey);
+    }),
+  );
   $('#ficha-tpl')?.addEventListener('change', (e) => {
     const tplId = e.target.value;
     const padrao = store.appConfig.templates.find((t) => t.padrao)?.id;
@@ -897,6 +910,43 @@ function abrirFicha(pKey) {
   });
   bindWa($('#conteudo-ficha'));
   abrir('veu-ficha');
+}
+
+/* ---------- NOVA PACIENTE RECALL (poucos cliques) ---------- */
+
+function abrirNovaRecall() {
+  $('#nr-nome').value = '';
+  $('#nr-fone').value = '';
+  $('#nr-status').value = 'Pendente';
+  $('#nr-ultima').value = '';
+  $('#nr-proxima').value = isoHoje();
+  $('#nr-obs').value = '';
+  abrir('veu-nova-recall');
+  setTimeout(() => $('#nr-nome')?.focus(), 60);
+}
+
+function salvarNovaRecall() {
+  const nome = $('#nr-nome').value.trim();
+  if (!nome) {
+    showToast('informe o nome da paciente');
+    $('#nr-nome')?.focus();
+    return;
+  }
+  store.adicionarLinha('recall', {
+    nome,
+    contato: $('#nr-fone').value.trim(),
+    status: $('#nr-status').value,
+    ultimaConsulta: $('#nr-ultima').value.trim(),
+    proximoContato: $('#nr-proxima').value ? fmtDataPlanilhaRecall($('#nr-proxima').value) : '',
+    dataContato: fmtDataPlanilhaRecall(isoHoje()),
+    obs: $('#nr-obs').value.trim(),
+  });
+  fechar('veu-nova-recall');
+  showToast(
+    syncService.configured
+      ? `${nome} salva — enviando para o Google Sheets…`
+      : `${nome} salva localmente — conecte as planilhas para sincronizar`,
+  );
 }
 
 /* ---------- REGISTRAR CONTATO ---------- */
@@ -1173,6 +1223,8 @@ function initApp() {
   });
 
   $('#btn-salvar-contato')?.addEventListener('click', salvarContato);
+  $('#btn-nova-recall')?.addEventListener('click', abrirNovaRecall);
+  $('#btn-salvar-nova-recall')?.addEventListener('click', salvarNovaRecall);
 
   document.querySelectorAll('.veu').forEach((v) =>
     v.addEventListener('mousedown', (e) => {

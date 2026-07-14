@@ -44,18 +44,16 @@ export const CIRURGIAS_COLS = [
 /** Colunas da planilha Cirurgias que espelham marcos do template */
 export const MARCO_SHEET_COLS = ['m3m', 'm6m', 'm1a'];
 
-export const EXAMES_PADRAO = [
-  'hemograma completo',
-  'coagulograma',
-  'glicemia de jejum',
-  'ureia e creatinina',
-  'TGO / TGP',
-  'TSH',
-  'eletrocardiograma (ECG)',
-  'risco cirúrgico',
-  'sorologias',
-  'beta hCG',
-];
+/** @deprecated use examesDoProtocolo() — mantido como fallback genérico */
+export { EXAMES_GENERICOS as EXAMES_PADRAO } from './preopProtocol.js';
+
+/** URLs padrão das planilhas (sempre disponíveis no botão "abrir no Google") */
+export const DEFAULT_RECALL_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU/edit';
+export const DEFAULT_CIRURGIAS_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI/edit';
+export const DEFAULT_RECALL_SHEET_ID = '1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU';
+export const DEFAULT_CIRURGIAS_SHEET_ID = '1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI';
 
 /**
  * Templates padrão de acompanhamento — Helen edita tudo em ⚙ Acompanhamentos.
