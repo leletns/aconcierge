@@ -48,29 +48,29 @@ npm run build
    - Executar como: **Eu** · Quem pode acessar: **Qualquer pessoa**
    - Copiar a **URL do Web App** (termina em `/exec`).
 
-### 3. Conectar o app (escolha UMA das opções)
+### 3. Conectar e gerar o LINK DE INSTALAÇÃO (Helen: zero configuração)
 
-**Opção 1 — pela interface (mais simples):** abrir o app, clicar **conectar planilhas**
-na barra lateral, colar a URL do Web App + a senha, salvar. Pronto.
+1. Abra o app **no seu computador** (site do Netlify ou local).
+2. Clique **conectar planilhas** → cole a URL do Web App + a senha →
+   **conectar e sincronizar** (a bolinha fica verde).
+3. No mesmo modal, clique **🔗 copiar link de instalação**.
+4. Envie esse link para o Mac da Helen (AirDrop, WhatsApp, e-mail).
 
-**Opção 2 — arquivo `.env`** na pasta do projeto (deixa pré-configurado):
+O link carrega a configuração embutida (`#cfg=…`): **toda vez que é aberto, o
+app se configura sozinho** — mesmo que o navegador dela limpe os dados, basta
+abrir o atalho de novo. Helen nunca vê tela de configuração, senha, nada.
 
-```env
-VITE_SHEETS_WEBAPP_URL=https://script.google.com/macros/s/COLE_A_URL_AQUI/exec
-VITE_SHEETS_API_SECRET=a-senha-que-voce-criou
-VITE_SPREADSHEET_URL_RECALL=https://docs.google.com/spreadsheets/d/1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU/edit
-VITE_SPREADSHEET_URL_CIRURGIAS=https://docs.google.com/spreadsheets/d/1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI/edit
-```
-
-Depois: `npm run build`
+> Alternativa técnica: arquivo `.env` na pasta do projeto (`VITE_SHEETS_WEBAPP_URL`,
+> `VITE_SHEETS_API_SECRET`, …) e `npm run build`. Só para rodar local.
 
 ### 4. Atalho "app" no Mac
 
-**Opção A — site no Netlify (mais simples, sem terminal):** se o app já está
-publicado (ver `docs/NETLIFY.md`), abra a URL no Chrome →
+**Opção A — site no Netlify (mais simples, sem terminal):** no Mac da Helen,
+abra o **link de instalação** (passo 3) no Chrome →
 menu ⋮ → **Transmitir, salvar e compartilhar → Criar atalho…** → marcar
 **Abrir como janela**. Vira um "app" com ícone próprio — arraste para o Dock.
-Pronto, pule para o passo 5.
+Importante: o atalho guarda o link de instalação completo, então cada abertura
+já entra conectada. Pronto, pule para o passo 5.
 
 **Opção B — rodando local (Automator):**
 

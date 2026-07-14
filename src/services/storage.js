@@ -26,6 +26,37 @@ export function saveToStorage(dados) {
   }
 }
 
+/**
+ * Link de instalação (#cfg=…): configura o app sozinho ao abrir.
+ * O admin conecta uma vez, copia o link e usa como atalho no Mac da Helen —
+ * cada abertura reaplica a configuração (imune a limpeza do navegador) e
+ * o segredo nunca vai para o bundle público nem para logs (fica no fragmento #).
+ */
+function configDoLink() {
+  try {
+    const m = (window.location.hash || '').match(/#cfg=([A-Za-z0-9_-]+)/);
+    if (!m) return null;
+    const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(escape(atob(b64)));
+    return JSON.parse(json);
+  } catch (_) {
+    return null;
+  }
+}
+
+export function buildLinkInstalacao(cfg) {
+  if (!cfg.webAppUrl || !cfg.apiSecret) return null;
+  const payload = { u: cfg.webAppUrl, s: cfg.apiSecret };
+  if (cfg.geminiApiKey) payload.g = cfg.geminiApiKey;
+  if (cfg.recallSheetUrl) payload.r = cfg.recallSheetUrl;
+  if (cfg.cirurgiasSheetUrl) payload.c = cfg.cirurgiasSheetUrl;
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return window.location.origin + window.location.pathname + '#cfg=' + b64;
+}
+
 export function loadConfig() {
   let cfg = null;
   try {
@@ -47,6 +78,20 @@ export function loadConfig() {
     overrides: ac.overrides || {},
     modifiedAt: ac.modifiedAt || '',
   };
+
+  // link de instalação tem prioridade sobre localStorage e .env
+  const magico = configDoLink();
+  if (magico) {
+    if (magico.u) cfg.webAppUrl = magico.u;
+    if (magico.s) cfg.apiSecret = magico.s;
+    if (magico.g) cfg.geminiApiKey = magico.g;
+    if (magico.r) cfg.recallSheetUrl = magico.r;
+    if (magico.c) cfg.cirurgiasSheetUrl = magico.c;
+    saveConfig(cfg);
+    try {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch (_) {}
+  }
   return cfg;
 }
 
