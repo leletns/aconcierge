@@ -4,16 +4,17 @@ Aplicação web única (MacBook da Helen) que substitui as duas abas do Google S
 **GESTÃO DE RECALL — PACIENTES** e **Cirurgias BLUE (controle Helen)** — com sync
 automático bidirecional, tudo editável, visual premium (Montserrat, paleta creme/azul).
 
-## Telas
+## Visualização Linha Única (single-page)
 
-| Tela | O que faz |
+| Área | O que faz |
 |------|-----------|
-| **hoje** | urgências: recall vencido, retornos da semana, pré-op em atenção |
-| **planilha recall** | grade editável 1:1 com a planilha Recall (inline edit, filtros, ⌘F, auto-save) |
-| **planilha cirurgias** | grade editável 1:1 com a planilha Cirurgias — alternância com 1 clique |
-| **retornos** | trilho pós-op com marcos configuráveis por procedimento |
-| **pré-op** | checklist de exames por cirurgia marcada |
-| **⚙ acompanhamentos** | templates de prazos (ex.: Botox 15/90/180d) + override por paciente |
+| **smart alert (topo)** | tarefas críticas & pacientes do dia — recall vencido, revisões vencidas, cirurgias próximas; colapsável |
+| **bloco recall** | uma linha por paciente: nome · status (badge colorida) · próximo contato · observações com auto-save direto na planilha |
+| **bloco cirurgias & revisões** | uma linha por cirurgia: status da próxima revisão · data · obs; pré-op com contagem regressiva |
+| **📊 resumo para gestão** | card executivo blue.: volume, porcentagens por status, revisões, motivos de recusa e gargalos — pronto para print/PDF |
+| **🎯 atenção do mês** | filtro global: só quem precisa de ação até o fim do mês |
+| **▸ ver detalhes** | expande a grade-espelho completa de cada planilha (oculta por padrão) |
+| **rodapé técnico** | ⚙ acompanhamentos (prazos por procedimento + override por paciente) · conectar planilhas |
 
 ## Rodar
 

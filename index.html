@@ -8,160 +8,92 @@
 <meta name="theme-color" content="#F4F1EB">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-<div class="app">
 
-  <aside class="sidebar">
-    <div class="wordmark"><span class="logo-thin">blue</span><span class="ponto"> .</span><small>central da concierge</small></div>
-    <nav class="nav" id="nav">
-      <button data-tela="hoje" class="ativo">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span>hoje</span><em class="badge" id="badge-hoje"></em>
-      </button>
-      <button data-tela="grid-recall">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
-        <span>planilha recall</span><em class="badge" id="badge-recall"></em>
-      </button>
-      <button data-tela="grid-cirurgias">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>
-        <span>planilha cirurgias</span><em class="badge" id="badge-cirurgias"></em>
-      </button>
-      <button data-tela="retornos">
-        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
-        <span>retornos</span><em class="badge" id="badge-retornos"></em>
-      </button>
-      <button data-tela="preop">
-        <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/></svg>
-        <span>pré-op</span><em class="badge" id="badge-preop"></em>
-      </button>
-      <button data-tela="acompanhamentos">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>acompanhamentos</span>
-      </button>
-    </nav>
-    <div class="sidebar-rodape">
-      <button class="nav-extra btn btn-exportar-sidebar" id="btn-exportar" type="button">
-        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M4 19h16"/></svg>
-        <span>exportar XLSX</span>
-      </button>
-      <button class="nav-extra btn-fantasma btn" id="btn-config" type="button" title="Sync automático com as duas planilhas Google">
-        <svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9"/></svg>
-        <span>conectar planilhas</span>
-      </button>
-      <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>aguardando planilhas</span></div>
-      <div class="atalho-k"><kbd>⌘</kbd><kbd>K</kbd> paciente · <kbd>⌘</kbd><kbd>F</kbd> na grade</div>
+<!-- ============ TOPO fixo ============ -->
+<header class="topo">
+  <div class="wordmark"><span class="logo-thin">blue</span><span class="ponto"> .</span><small>central da concierge</small></div>
+  <div class="topo-acoes">
+    <button class="filtro filtro-mes" id="btn-atencao-mes" type="button" title="mostrar só quem precisa de atenção este mês">🎯 atenção do mês</button>
+    <button class="btn btn-claro" id="btn-exportar" type="button">exportar XLSX</button>
+    <button class="btn btn-azul" id="btn-gestao" type="button">📊 resumo para gestão</button>
+    <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>aguardando</span></div>
+  </div>
+</header>
+
+<!-- ============ SMART ALERT ============ -->
+<div id="smart-alert"></div>
+
+<!-- ============ PÁGINA ÚNICA ============ -->
+<main class="pagina">
+
+  <!-- ---------- bloco RECALL ---------- -->
+  <section class="bloco" id="bloco-recall">
+    <div class="bloco-cabecalho">
+      <div>
+        <h1>recall<span class="ponto">.</span></h1>
+        <div class="sub">reativação e agendamento — tudo salva direto na planilha</div>
+      </div>
+      <div class="bloco-filtros">
+        <div class="filtros" id="filtros-recall"></div>
+        <div class="grade-busca bloco-busca">
+          <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input type="search" id="busca-recall" placeholder="buscar… (⌘F)">
+        </div>
+        <button class="btn btn-azul" id="btn-nova-recall" type="button">＋ nova paciente</button>
+      </div>
     </div>
-  </aside>
-
-  <main class="principal">
-
-    <!-- ============ HOJE ============ -->
-    <section class="tela ativa" id="tela-hoje">
-      <div class="cabecalho">
-        <div>
-          <h1 id="saudacao">boa tarde, Helen<span class="ponto">.</span></h1>
-          <div class="sub" id="data-hoje"></div>
-        </div>
-        <div class="acoes-cabecalho">
-          <button class="btn btn-claro" id="btn-hoje-recall" type="button">＋ paciente no recall</button>
-          <button class="btn btn-azul" id="btn-hoje-cirurgia" type="button">＋ nova cirurgia</button>
-        </div>
-      </div>
-      <div class="grade-hoje" id="grade-hoje"></div>
-    </section>
-
-    <!-- ============ PLANILHA RECALL ============ -->
-    <section class="tela" id="tela-grid-recall">
-      <div class="cabecalho">
-        <div>
-          <h1>planilha recall<span class="ponto">.</span></h1>
-          <div class="sub">espelho da GESTÃO DE RECALL — edite aqui, sincroniza sozinho · não precisa abrir o Google</div>
-        </div>
-        <div class="acoes-cabecalho">
-          <button class="btn btn-claro" id="btn-alternar-cirurgias" type="button">
-            ⇄ planilha cirurgias
-          </button>
-          <button class="btn btn-azul" id="btn-nova-recall-topo" type="button">＋ nova paciente</button>
-          <button class="btn btn-fantasma" id="btn-abrir-recall" type="button">abrir no Google ↗</button>
-        </div>
-      </div>
+    <div class="linhas cartao" id="linhas-recall"></div>
+    <button class="ver-detalhes" id="btn-det-recall" type="button">▸ ver detalhes — planilha Recall completa</button>
+    <div class="detalhes" id="det-recall" hidden>
       <div id="grid-recall"></div>
-    </section>
+      <button class="btn btn-fantasma" id="btn-abrir-recall" type="button" style="display:none">abrir no Google ↗</button>
+    </div>
+  </section>
 
-    <!-- ============ PLANILHA CIRURGIAS ============ -->
-    <section class="tela" id="tela-grid-cirurgias">
-      <div class="cabecalho">
-        <div>
-          <h1>planilha cirurgias<span class="ponto">.</span></h1>
-          <div class="sub">Cirurgias BLUE (controle Helen) · edição direta, sincroniza com o Google Sheets</div>
-        </div>
-        <div class="acoes-cabecalho">
-          <button class="btn btn-claro" id="btn-alternar-recall" type="button">
-            ⇄ planilha recall
-          </button>
-          <button class="btn btn-fantasma" id="btn-abrir-cirurgias" type="button">abrir no Google ↗</button>
+  <!-- ---------- bloco CIRURGIAS & REVISÕES ---------- -->
+  <section class="bloco" id="bloco-cirurgias">
+    <div class="bloco-cabecalho">
+      <div>
+        <h1>cirurgias &amp; revisões<span class="ponto">.</span></h1>
+        <div class="sub">pós-operatório com prazos configuráveis · pré-op com contagem regressiva</div>
+      </div>
+      <div class="bloco-filtros">
+        <div class="filtros" id="filtros-cirurgias"></div>
+        <div class="grade-busca bloco-busca">
+          <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input type="search" id="busca-cirurgias" placeholder="buscar…">
         </div>
       </div>
+    </div>
+    <div class="linhas cartao" id="linhas-cirurgias"></div>
+    <button class="ver-detalhes" id="btn-det-cirurgias" type="button">▸ ver detalhes — planilha Cirurgias completa</button>
+    <div class="detalhes" id="det-cirurgias" hidden>
       <div id="grid-cirurgias"></div>
-    </section>
+      <button class="btn btn-fantasma" id="btn-abrir-cirurgias" type="button" style="display:none">abrir no Google ↗</button>
+    </div>
+  </section>
 
-    <!-- ============ RETORNOS ============ -->
-    <section class="tela" id="tela-retornos">
-      <div class="cabecalho">
-        <div>
-          <h1>retornos<span class="ponto">.</span></h1>
-          <div class="sub" id="retornos-sub">acompanhamento pós-operatório — prazos configuráveis em ⚙ acompanhamentos</div>
-        </div>
-      </div>
-      <div class="filtros" id="filtros-retornos"></div>
-      <div class="cartao tabela-envolto">
-        <table>
-          <thead><tr>
-            <th>paciente</th><th>cirurgia</th><th>trilho pós-op</th><th>próximo marco</th><th>status</th><th></th>
-          </tr></thead>
-          <tbody id="corpo-retornos"></tbody>
-        </table>
-      </div>
-    </section>
+  <!-- ---------- rodapé técnico ---------- -->
+  <footer class="rodape-tecnico">
+    <button type="button" id="btn-acompanhamentos">⚙ acompanhamentos (prazos de revisão)</button>
+    <span>·</span>
+    <button type="button" id="btn-config">conectar planilhas</button>
+    <span>·</span>
+    <span class="rodape-atalhos"><kbd>⌘K</kbd> paciente · <kbd>⌘F</kbd> buscar · <kbd>Esc</kbd> fechar</span>
+    <span class="rodape-marca">blue<span class="ponto">.</span> central da concierge</span>
+  </footer>
 
-    <!-- ============ PRÉ-OP ============ -->
-    <section class="tela" id="tela-preop">
-      <div class="cabecalho">
-        <div>
-          <h1>pré-op<span class="ponto">.</span></h1>
-          <div class="sub">checklist do Protocolo Interno de Exames Pré-Operatórios — automático por tipo de cirurgia</div>
-        </div>
-        <div class="acoes-cabecalho">
-          <button class="btn btn-azul" id="btn-nova-cirurgia" type="button">＋ nova cirurgia</button>
-        </div>
-      </div>
-      <div class="grade-preop" id="grade-preop"></div>
-    </section>
-
-    <!-- ============ ⚙ ACOMPANHAMENTOS ============ -->
-    <section class="tela" id="tela-acompanhamentos">
-      <div class="cabecalho">
-        <div>
-          <h1>acompanhamentos<span class="ponto">.</span></h1>
-          <div class="sub">prazos de retorno por procedimento — qualquer número de dias, qualquer número de marcos</div>
-        </div>
-      </div>
-      <div class="tpl-lista" id="acompanhamentos-lista"></div>
-    </section>
-
-  </main>
-</div>
-
-<button type="button" class="fab-resumir" id="fab-resumir" title="Resumir paciente com Gemini">✨ Resumir</button>
+</main>
 
 <!-- ============ modal: ficha unificada ============ -->
 <div class="veu" id="veu-ficha">
   <div class="modal ficha" id="conteudo-ficha"></div>
 </div>
 
-<!-- ============ modal: registrar contato (recall) ============ -->
+<!-- ============ modal: registrar contato ============ -->
 <div class="veu" id="veu-contato">
   <div class="modal">
     <h3>registrar contato<span class="ponto">.</span></h3>
@@ -194,7 +126,7 @@
   </div>
 </div>
 
-<!-- ============ modal: resumo ✨ ============ -->
+<!-- ============ modal: resumo ✨ (paciente) ============ -->
 <div class="veu" id="veu-resumo">
   <div class="modal">
     <h3>✨ Resumo<span class="ponto">.</span></h3>
@@ -205,6 +137,30 @@
       <button class="btn btn-claro" id="btn-resumo-regenerar" type="button">regenerar</button>
       <button class="btn btn-claro" id="btn-resumo-notas" type="button">inserir em observações</button>
       <button class="btn btn-azul" id="btn-resumo-fechar" type="button">fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: card de gestão blue. ============ -->
+<div class="veu veu-gestao" id="veu-gestao">
+  <div class="modal modal-gestao">
+    <div id="cartao-gestao"></div>
+    <div class="modal-rodape gestao-acoes">
+      <button class="btn btn-claro" id="btn-gestao-copiar" type="button">copiar texto</button>
+      <button class="btn btn-claro" id="btn-gestao-imprimir" type="button">🖨 imprimir / salvar PDF</button>
+      <button class="btn btn-azul" id="btn-gestao-fechar" type="button">fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: ⚙ acompanhamentos ============ -->
+<div class="veu" id="veu-acomp">
+  <div class="modal modal-acomp">
+    <h3>acompanhamentos<span class="ponto">.</span></h3>
+    <div class="modal-sub">prazos de revisão por procedimento — qualquer número de dias e de marcos</div>
+    <div class="tpl-lista" id="acompanhamentos-lista"></div>
+    <div class="modal-rodape">
+      <button class="btn btn-azul" id="btn-acomp-fechar" type="button">fechar</button>
     </div>
   </div>
 </div>
@@ -244,12 +200,12 @@
 <div class="veu" id="veu-config">
   <div class="modal">
     <h3>conectar planilhas<span class="ponto">.</span></h3>
-    <div class="modal-sub">Sync <strong>automático</strong> com as duas planilhas — edite aqui ou no Google, espelha nos dois lados. Sem importar CSV.</div>
+    <div class="modal-sub">Sync <strong>automático</strong> com as duas planilhas — edite aqui ou no Google, espelha nos dois lados.</div>
     <div class="config-grid">
       <div class="campo-grupo"><label>Web App URL (Apps Script → Implantar)</label><input class="campo" id="cfg-webapp" placeholder="https://script.google.com/macros/s/.../exec"></div>
       <div class="campo-grupo"><label>API Secret (Script Properties → SHEETS_API_SECRET)</label><input class="campo" id="cfg-secret" type="password"></div>
-      <div class="campo-grupo"><label>URL da planilha Recall (botão "abrir no Google")</label><input class="campo" id="cfg-url-recall" placeholder="https://docs.google.com/spreadsheets/d/1BikHFpFs_2d1W1RpvH53lisr6hZCRNVQTZHmHr1H8pU/edit"></div>
-      <div class="campo-grupo"><label>URL da planilha Cirurgias</label><input class="campo" id="cfg-url-cirurgias" placeholder="https://docs.google.com/spreadsheets/d/1ZORqTbcRRc0MCFwGbGlh4I_bLNPIWKsc7WRdoG1jGEI/edit"></div>
+      <div class="campo-grupo"><label>URL da planilha Recall (opcional — botão "abrir no Google")</label><input class="campo" id="cfg-url-recall" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
+      <div class="campo-grupo"><label>URL da planilha Cirurgias (opcional)</label><input class="campo" id="cfg-url-cirurgias" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
     </div>
     <div class="link-magico-caixa">
       <strong>Mac da Helen — zero configuração</strong>
