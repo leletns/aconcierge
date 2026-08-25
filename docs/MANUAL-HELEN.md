@@ -14,14 +14,18 @@ Centraliza **Recall** + **Cirurgias** + **retornos pós-op** + **checklist pré-
 
 ## 2. Telas — o que clicar e quando
 
+**Barra de acesso rápido (sempre visível no topo):** três botões lado a lado — **recall**, **cirurgias & revisões** e **lembretes** — levam direto à seção, sem rolar a página. A bolinha vermelha mostra quanto tem pendente em cada uma (pacientes do dia · revisões do mês · lembretes vencidos).
+
 | Tela | Para que serve | Quando usar |
 |------|----------------|-------------|
-| **hoje** | Urgências do dia: recall vencido, retornos da semana, pré-op em atenção | **Primeira tela da manhã** |
-| **planilha recall** | Grade editável = planilha GESTÃO DE RECALL | Contatar / atualizar status / próximo contato |
-| **planilha cirurgias** | Grade editável = planilha Cirurgias BLUE | Incluir cirurgia, hospital, status 03m/06m/1a |
-| **retornos** | Trilho pós-op com datas calculadas (fuso Brasília) | Acompanhar marcação dos retornos |
-| **pré-op** | Checklist de exames do **Protocolo Interno** por tipo de cirurgia | Paciente com cirurgia marcada |
+| **recall** | Lista + grade editável = planilha GESTÃO DE RECALL | Contatar / atualizar status / próximo contato |
+| **cirurgias & revisões** | Cirurgias + régua **revisões por mês** + grade Cirurgias BLUE | Ver quem tem revisão em cada mês; status 03m/06m/1a |
+| **lembretes** | Anotações com prioridade, data/hora e repetição (estilo app Lembretes do Mac) | Tarefas pessoais da concierge |
 | **acompanhamentos** | Templates de prazos (Botox 15/90/180d, Cirurgia 90/180/365…) | Ajustar regras uma vez |
+
+O alerta do topo (**tarefas críticas**) mostra só o que é urgente de verdade: pacientes do recall para contatar hoje e cirurgias próximas. Revisões vencidas **não** aparecem lá — veja-as na régua por mês ou no filtro "revisões vencidas".
+
+**Suporte:** botão verde **suporte** no topo (ou "💬 suporte whatsapp" no rodapé) abre conversa direta no WhatsApp do suporte.
 
 ### Alternar Recall ↔ Cirurgias sem sair do app
 
@@ -137,6 +141,20 @@ O checklist **não é mais uma lista genérica**. Ele aplica o protocolo do PDF 
 - Status **Pendente / Marcada / Realizada / Sem resposta** espelha as colunas da planilha.
 - Em **acompanhamentos**, Helen pode criar Botox (15/90/180), Lipedema, etc.
 - Na ficha da paciente: override de prazos só para aquela paciente.
+- **Revisões por mês:** régua de meses no topo do bloco cirurgias — toque num mês para ver só as pacientes com revisão naquele mês; toque de novo para limpar.
+
+---
+
+## 8.1 Lembretes (estilo app Lembretes do Mac)
+
+1. Escreva no campo **＋ novo lembrete** e tecle **Enter** — criou.
+2. Toque no lembrete para abrir os detalhes: **prioridade** (nenhuma / ! / !! / !!!), **lembrar em** (data + hora) e **repetir** (todos os dias → todo ano).
+3. Concluir um lembrete com repetição **remarca sozinho** para a próxima data (igual ao Mac).
+4. **Notificações do Mac:** clique em **🔔 ativar notificações do Mac** uma vez — com o app aberto, os lembretes da hora aparecem como notificação do sistema.
+5. **Mandar para o app Lembretes do Mac:** botão **⤓** no lembrete (ou **⤓ exportar p/ app Lembretes** para todos) baixa um arquivo `.ics` — abra o arquivo baixado e ele entra no app Lembretes com prioridade e repetição.
+6. Concluídos ficam guardados em **concluídos (n)**.
+
+Os lembretes ficam salvos no Mac (não vão para a planilha).
 
 ---
 
