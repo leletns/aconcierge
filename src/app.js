@@ -5,7 +5,15 @@
  * Cirurgias & Revisões → rodapé técnico. As planilhas completas ficam
  * ocultas atrás de "ver detalhes". Card de gestão executivo em modal.
  */
-import { RECALL_COLS, CIRURGIAS_COLS, STATUS_RECALL, STATUS_MARCO } from './utils/constants.js';
+import {
+  RECALL_COLS,
+  CIRURGIAS_COLS,
+  STATUS_RECALL,
+  STATUS_MARCO,
+  SUPORTE_WHATSAPP,
+  PRIORIDADES_LEMBRETE,
+  REPETICAO_LEMBRETE,
+} from './utils/constants.js';
 import { esc, iniciais, debounce } from './utils/helpers.js';
 import {
   fmt,
@@ -17,12 +25,14 @@ import {
   fmtDataPlanilhaRecall,
   fmtDataPlanilhaCirurgias,
   hoje,
+  paraData,
 } from './utils/dates.js';
 import { formatPhoneDisplay, buildWhatsAppLink } from './utils/phone.js';
 import { patientKey } from './utils/matching.js';
 import { estadoMarco, proximoMarco, templateParaCirurgia } from './utils/templates.js';
 import { Store } from './services/store.js';
 import { SyncService } from './services/syncService.js';
+import { RemindersStore, prioridadeDe, repeticaoDe, baixarIcs } from './services/reminders.js';
 import { SummaryService, pacienteSnapshot } from './services/summaryService.js';
 import { exportToXlsx } from './services/exportService.js';
 import { buildLinkInstalacao } from './services/storage.js';
@@ -44,12 +54,23 @@ let filtroRecall = 'todos';
 let filtroCirurgias = 'todas';
 let buscaRecall = '';
 let buscaCirurgias = '';
+let mesRevisao = ''; // 'yyyy-mm' selecionado na régua "revisões por mês"
+let ultimaNovaRecallKey = ''; // destaque da paciente recém-registrada
+let lembreteAtual = null;
+let feitosVisiveis = false;
 const detalhesAbertos = { recall: false, cirurgias: false };
 
 /* ---------- estado central ---------- */
 const store = new Store({ onChange: () => renderizarTudo() });
 const syncService = new SyncService(store);
 store.sync = syncService;
+
+const reminders = new RemindersStore({
+  onChange: () => {
+    if (!digitandoEm($('#bloco-lembretes'))) renderLembretes();
+    atualizarNavBadges();
+  },
+});
 
 const summaryService = new SummaryService({ geminiApiKey: store.config.geminiApiKey });
 summaryService.setSheetsApi(syncService.api);
@@ -125,13 +146,24 @@ function bindWa(root) {
 
 /* ---------- utilidades da página ---------- */
 
+/* mesma linguagem de cor das planilhas (beautify do Apps Script):
+   Agendado verde · Pendente âmbar · Sem Resposta coral ·
+   Em Acompanhamento azul · Não agendou / Sem interesse neutro */
 const SELO_RECALL = {
   Agendado: 'st-verde',
   Pendente: 'st-ambar',
-  'Não agendou': 'st-coral',
+  'Não agendou': 'st-neutro',
   'Sem Resposta': 'st-coral',
   'Em Acompanhamento': 'st-azul',
   'Sem interesse': 'st-neutro',
+};
+const SELO_RECALL_FICHA = {
+  Agendado: 'selo-verde',
+  Pendente: 'selo-ambar',
+  'Não agendou': 'selo-neutro',
+  'Sem Resposta': 'selo-coral',
+  'Em Acompanhamento': 'selo-azul',
+  'Sem interesse': 'selo-neutro',
 };
 const SELO_MARCO = {
   Realizada: 'st-verde',
@@ -171,8 +203,10 @@ function contemBusca(linha, campos, termo) {
 
 function renderizarTudo() {
   renderAlerta();
+  atualizarNavBadges();
   if (!digitandoEm($('#linhas-recall'))) renderLinhasRecall();
   if (!digitandoEm($('#linhas-cirurgias'))) renderLinhasCirurgias();
+  if (!digitandoEm($('#bloco-lembretes'))) renderLembretes();
   if (detalhesAbertos.recall && !gridRecall.editando) gridRecall.render();
   if (detalhesAbertos.cirurgias && !gridCirurgias.editando) gridCirurgias.render();
   const acomp = $('#acompanhamentos-lista');
@@ -181,24 +215,37 @@ function renderizarTudo() {
   }
 }
 
-/* ---------- SMART ALERT ---------- */
+/* ---------- BARRA FIXA: acesso rápido ---------- */
+
+function atualizarNavBadges() {
+  const badge = (sel, n) => {
+    const el = $(sel);
+    if (!el) return;
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.hidden = !n;
+  };
+  badge('#badge-recall', store.recallsVencidos().length);
+  badge('#badge-cirurgias', (revisoesPorMes().get(isoHoje().slice(0, 7)) || []).length);
+  badge('#badge-lembretes', reminders.vencidos().length);
+}
+
+function ajustarBarraFixa() {
+  const topo = $('.topo');
+  if (topo) document.documentElement.style.setProperty('--topo-h', topo.offsetHeight + 'px');
+}
+
+/* ---------- SMART ALERT (só o que é crítico: recall do dia + cirurgias próximas) ---------- */
 
 function urgencias() {
   const recalls = store.recallsVencidos();
-  const revisoes = [];
-  for (const c of store.cirurgiasPassadas()) {
-    const marcos = store.marcosDe(c);
-    const px = proximoMarco(marcos);
-    if (px && px.dataISO && difDias(px.dataISO) <= 0) revisoes.push({ c, px });
-  }
   const cirurgiasProximas = store.cirurgiasFuturas().filter(({ iso }) => difDias(iso) <= 7);
-  return { recalls, revisoes, cirurgiasProximas };
+  return { recalls, cirurgiasProximas };
 }
 
 function renderAlerta() {
   const el = $('#smart-alert');
-  const { recalls, revisoes, cirurgiasProximas } = urgencias();
-  const total = recalls.length + revisoes.length + cirurgiasProximas.length;
+  const { recalls, cirurgiasProximas } = urgencias();
+  const total = recalls.length + cirurgiasProximas.length;
 
   if (!total) {
     el.innerHTML = `<div class="alerta alerta-ok">✓ nenhuma urgência para hoje — operação sob controle</div>`;
@@ -219,15 +266,6 @@ function renderAlerta() {
     </div>`;
   });
 
-  const itensRev = revisoes.map(({ c, px }) => {
-    const dd = difDias(px.dataISO);
-    return `<div class="alerta-item" data-al-cir="${c.key}">
-      <span class="alerta-nome">${esc(c.paciente)}</span>
-      <span class="alerta-det">revisão ${esc(px.label)}</span>
-      <span class="selo ${dd < 0 ? 'selo-coral' : 'selo-ambar'}">${dd < 0 ? Math.abs(dd) + 'd atrasada' : 'é hoje'}</span>
-    </div>`;
-  });
-
   const itensCir = cirurgiasProximas.map(({ c, iso }) => {
     const dd = difDias(iso);
     return `<div class="alerta-item" data-al-cir="${c.key}">
@@ -242,12 +280,11 @@ function renderAlerta() {
       <button type="button" class="alerta-topo" id="alerta-toggle">
         <span class="alerta-badge">${total}</span>
         <strong>tarefas críticas &amp; pacientes do dia</strong>
-        <span class="alerta-resumo">${recalls.length ? recalls.length + ' recall' : ''}${revisoes.length ? ' · ' + revisoes.length + ' revisão(ões)' : ''}${cirurgiasProximas.length ? ' · ' + cirurgiasProximas.length + ' cirurgia(s) próxima(s)' : ''}</span>
+        <span class="alerta-resumo">${recalls.length ? recalls.length + ' recall' : ''}${cirurgiasProximas.length ? ' · ' + cirurgiasProximas.length + ' cirurgia(s) próxima(s)' : ''}</span>
         <span class="alerta-seta">${alertaColapsado ? '▾' : '▴'}</span>
       </button>
       <div class="alerta-corpo">
         ${grupo('📞 pacientes do dia — recall', itensRecall)}
-        ${grupo('🔄 revisões vencidas', itensRev)}
         ${grupo('🏥 cirurgias próximas', itensCir)}
       </div>
     </div>`;
@@ -317,7 +354,7 @@ function renderLinhasRecall() {
           const prox = dataAcaoRecall(r);
           const dd = prox ? difDias(prox) : null;
           const vencida = dd !== null && dd <= 0 && !['Agendado', 'Sem interesse'].includes(r.status || '');
-          return `<div class="linha" data-key="${r.key}">
+          return `<div class="linha ${r.key === ultimaNovaRecallKey ? 'linha-nova' : ''}" data-key="${r.key}">
         <div class="linha-nome" data-ficha="${r.key}" title="abrir ficha">
           ${esc(r.nome)}
           <span class="linha-sub">${esc(r.ultimaConsulta || '')}</span>
@@ -382,6 +419,47 @@ function bindLinhasRecall(el) {
 
 /* ---------- BLOCO CIRURGIAS & REVISÕES (linhas) ---------- */
 
+/** revisões (próximo marco com data) agrupadas por mês 'yyyy-mm' */
+function revisoesPorMes() {
+  const mapa = new Map();
+  for (const c of store.cirurgiasPassadas()) {
+    if (!String(c.paciente || '').trim()) continue;
+    const px = proximoMarco(store.marcosDe(c));
+    if (!px || !px.dataISO) continue;
+    const chave = px.dataISO.slice(0, 7);
+    if (!mapa.has(chave)) mapa.set(chave, []);
+    mapa.get(chave).push({ c, px });
+  }
+  return mapa;
+}
+
+function renderMesesCirurgias() {
+  const el = $('#meses-cirurgias');
+  if (!el) return;
+  const mapa = revisoesPorMes();
+  const base = paraData(isoHoje().slice(0, 7) + '-01');
+  const pilulas = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const n = (mapa.get(chave) || []).length;
+    const rotulo =
+      d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') +
+      ' ' +
+      String(d.getFullYear()).slice(2);
+    pilulas.push(
+      `<button type="button" class="mes-pilula ${mesRevisao === chave ? 'ativo' : ''} ${n ? '' : 'vazio'}" data-mes="${chave}">${rotulo} <span class="n">${n}</span></button>`,
+    );
+  }
+  el.innerHTML = `<div class="meses-rotulo">revisões por mês — toque para filtrar</div><div class="meses">${pilulas.join('')}</div>`;
+  el.querySelectorAll('[data-mes]').forEach((b) =>
+    b.addEventListener('click', () => {
+      mesRevisao = mesRevisao === b.dataset.mes ? '' : b.dataset.mes;
+      renderLinhasCirurgias();
+    }),
+  );
+}
+
 function renderLinhasCirurgias() {
   const el = $('#linhas-cirurgias');
 
@@ -393,14 +471,17 @@ function renderLinhasCirurgias() {
     ['concluidas', 'concluídas'],
   ];
   $('#filtros-cirurgias').innerHTML = chips
-    .map(([id, rotulo]) => `<button class="filtro ${filtroCirurgias === id ? 'ativo' : ''}" data-fc="${id}">${rotulo}</button>`)
+    .map(([id, rotulo]) => `<button class="filtro ${!mesRevisao && filtroCirurgias === id ? 'ativo' : ''}" data-fc="${id}">${rotulo}</button>`)
     .join('');
   $('#filtros-cirurgias').querySelectorAll('[data-fc]').forEach((b) =>
     b.addEventListener('click', () => {
       filtroCirurgias = b.dataset.fc;
+      mesRevisao = '';
       renderLinhasCirurgias();
     }),
   );
+
+  renderMesesCirurgias();
 
   const fim = fimDoMes();
   let itens = store.cirurgias
@@ -413,7 +494,9 @@ function renderLinhasCirurgias() {
       return { c, iso, futura, marcos, px };
     });
 
-  if (filtroCirurgias === 'vencidas') itens = itens.filter(({ px }) => px && px.dataISO && difDias(px.dataISO) <= 0);
+  if (mesRevisao) {
+    itens = itens.filter(({ px }) => px && px.dataISO && px.dataISO.startsWith(mesRevisao));
+  } else if (filtroCirurgias === 'vencidas') itens = itens.filter(({ px }) => px && px.dataISO && difDias(px.dataISO) <= 0);
   else if (filtroCirurgias === 'mes') itens = itens.filter(({ px, futura, iso }) => (px && px.dataISO && px.dataISO <= fim) || (futura && iso <= fim));
   else if (filtroCirurgias === 'preop') itens = itens.filter(({ futura }) => futura);
   else if (filtroCirurgias === 'concluidas') itens = itens.filter(({ futura, px }) => !futura && !px);
@@ -468,9 +551,14 @@ function renderLinhasCirurgias() {
       </div>`;
         })
         .join('')
-    : `<div class="vazio"><strong>nenhuma cirurgia aqui</strong>ajuste a busca ou os filtros</div>`;
+    : `<div class="vazio"><strong>${mesRevisao ? 'nenhuma revisão em ' + esc(rotuloMes(mesRevisao)) : 'nenhuma cirurgia aqui'}</strong>${mesRevisao ? 'toque no mês de novo para limpar o filtro' : 'ajuste a busca ou os filtros'}</div>`;
 
   bindLinhasCirurgias(el);
+}
+
+function rotuloMes(chave) {
+  const d = paraData(chave + '-01');
+  return d ? d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : chave;
 }
 
 function bindLinhasCirurgias(el) {
@@ -510,6 +598,161 @@ function bindLinhasCirurgias(el) {
     i.addEventListener('keydown', (e) => e.key === 'Enter' && i.blur());
   });
   bindWa(el);
+}
+
+/* ---------- LEMBRETES (estilo app Lembretes do Mac) ---------- */
+
+function metaLembrete(l) {
+  const partes = [];
+  if (l.dataISO) {
+    const dd = difDias(l.dataISO);
+    let texto;
+    let classe = '';
+    if (dd < 0) {
+      texto = dd === -1 ? 'ontem' : `venceu há ${Math.abs(dd)}d`;
+      classe = 'lem-vencido';
+    } else if (dd === 0) {
+      texto = 'hoje';
+      classe = 'lem-hoje';
+    } else if (dd === 1) {
+      texto = 'amanhã';
+    } else {
+      texto = fmt(l.dataISO);
+    }
+    if (l.hora) texto += ` · ${l.hora}`;
+    partes.push(`<span class="${classe}">${esc(texto)}</span>`);
+  } else {
+    partes.push('<span>sem data</span>');
+  }
+  if (l.repetir && l.repetir !== 'nunca') {
+    partes.push(`<span>↻ ${esc(repeticaoDe(l.repetir).label)}</span>`);
+  }
+  return partes.join('');
+}
+
+function lembreteHtml(l) {
+  const prio = prioridadeDe(l.prioridade);
+  return `<div class="lem ${l.feito ? 'feito' : ''}" data-lem="${l.id}">
+    <button type="button" class="lem-check" data-lem-check="${l.id}" title="${l.feito ? 'reabrir' : l.repetir !== 'nunca' && l.dataISO ? 'concluir — remarca para a próxima data' : 'concluir'}"></button>
+    <div class="lem-corpo" data-lem-edit="${l.id}" title="toque para editar prioridade, data e repetição">
+      <div class="lem-titulo">${prio.sinais ? `<span class="lem-prio prio-${prio.id}">${prio.sinais}</span>` : ''}${esc(l.titulo)}</div>
+      <div class="lem-meta">${metaLembrete(l)}</div>
+      ${l.notas ? `<div class="lem-notas">${esc(l.notas)}</div>` : ''}
+    </div>
+    <button type="button" class="lem-ics" data-lem-ics="${l.id}" title="enviar para o app Lembretes do Mac">⤓</button>
+  </div>`;
+}
+
+function renderLembretes() {
+  const el = $('#linhas-lembretes');
+  if (!el) return;
+  const peso = (l) => prioridadeDe(l.prioridade).peso || 10;
+  const abertos = reminders.lista
+    .filter((l) => !l.feito)
+    .sort((a, b) => {
+      const da = a.dataISO || '9999';
+      const db = b.dataISO || '9999';
+      if (da !== db) return da < db ? -1 : 1;
+      if (peso(a) !== peso(b)) return peso(a) - peso(b);
+      return a.criadoEm < b.criadoEm ? -1 : 1;
+    });
+  const feitos = reminders.lista.filter((l) => l.feito).sort((a, b) => (a.concluidoEm > b.concluidoEm ? -1 : 1));
+
+  el.innerHTML = abertos.length
+    ? abertos.map(lembreteHtml).join('')
+    : `<div class="vazio"><strong>nenhum lembrete</strong>escreva acima e tecle Enter — como no app Lembretes</div>`;
+
+  const toggle = $('#lem-toggle-feitos');
+  const caixa = $('#linhas-lembretes-feitos');
+  if (feitos.length) {
+    toggle.hidden = false;
+    toggle.textContent = `${feitosVisiveis ? '▾' : '▸'} concluídos (${feitos.length})`;
+    caixa.hidden = !feitosVisiveis;
+    caixa.innerHTML = feitosVisiveis ? feitos.map(lembreteHtml).join('') : '';
+  } else {
+    toggle.hidden = true;
+    caixa.hidden = true;
+    caixa.innerHTML = '';
+  }
+
+  bindLembretes($('#bloco-lembretes'));
+}
+
+function bindLembretes(root) {
+  root.querySelectorAll('[data-lem-check]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const l = reminders.get(b.dataset.lemCheck);
+      reminders.alternarFeito(b.dataset.lemCheck);
+      if (l && l.repetir !== 'nunca' && l.dataISO && !l.feito) {
+        showToast(`remarcado para ${fmt(reminders.get(b.dataset.lemCheck)?.dataISO || l.dataISO)}`);
+      }
+    }),
+  );
+  root.querySelectorAll('[data-lem-edit]').forEach((c) =>
+    c.addEventListener('click', () => abrirLembrete(c.dataset.lemEdit)),
+  );
+  root.querySelectorAll('[data-lem-ics]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const l = reminders.get(b.dataset.lemIcs);
+      if (!l) return;
+      baixarIcs(`lembrete-${(l.titulo || 'blue').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 40)}.ics`, [l]);
+      showToast('arquivo baixado — abra no Mac para entrar no app Lembretes');
+    }),
+  );
+}
+
+function abrirLembrete(id) {
+  const l = reminders.get(id);
+  if (!l) return;
+  lembreteAtual = id;
+  $('#lem-titulo').value = l.titulo;
+  $('#lem-notas').value = l.notas || '';
+  $('#lem-prio').value = l.prioridade || 'nenhuma';
+  $('#lem-repetir').value = l.repetir || 'nunca';
+  $('#lem-data').value = l.dataISO || '';
+  $('#lem-hora').value = l.hora || '';
+  abrir('veu-lembrete');
+}
+
+function salvarLembrete() {
+  const l = reminders.get(lembreteAtual);
+  if (!l) return;
+  const titulo = $('#lem-titulo').value.trim();
+  if (!titulo) {
+    showToast('dê um título ao lembrete');
+    $('#lem-titulo')?.focus();
+    return;
+  }
+  reminders.atualizar(lembreteAtual, {
+    titulo,
+    notas: $('#lem-notas').value.trim(),
+    prioridade: $('#lem-prio').value,
+    repetir: $('#lem-repetir').value,
+    dataISO: $('#lem-data').value,
+    hora: $('#lem-hora').value,
+  });
+  fechar('veu-lembrete');
+  showToast('lembrete salvo');
+}
+
+function verificarNotificacoes() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  for (const l of reminders.paraNotificar()) {
+    try {
+      const n = new Notification(l.titulo || 'lembrete', {
+        body: `${l.dataISO === isoHoje() ? 'hoje' : 'vencido'}${l.hora ? ' · ' + l.hora : ''}${l.notas ? '\n' + l.notas : ''}`,
+        tag: l.id,
+      });
+      n.onclick = () => window.focus();
+    } catch (_) {}
+    reminders.marcarNotificado(l.id);
+  }
+}
+
+function atualizarBotaoNotif() {
+  const btn = $('#btn-lem-notif');
+  if (!btn) return;
+  btn.hidden = !('Notification' in window) || Notification.permission !== 'default';
 }
 
 /* ---------- CARD DE GESTÃO blue. ---------- */
@@ -703,7 +946,7 @@ function abrirFicha(pKey) {
     .map(
       (r) => `
     <div class="ficha-recall-linha">
-      <div><span class="selo ${r.status === 'Agendado' ? 'selo-verde' : r.status === 'Sem Resposta' ? 'selo-coral' : 'selo-ambar'}">${esc(r.status || '—')}</span>
+      <div><span class="selo ${SELO_RECALL_FICHA[r.status] || 'selo-neutro'}">${esc(r.status || '—')}</span>
         ${r.motivoRecusa ? `<span class="celula-sub"> · motivo: ${esc(r.motivoRecusa)}</span>` : ''}</div>
       <div class="celula-sub">última consulta: ${esc(r.ultimaConsulta || '—')} · contato: ${esc(r.dataContato || '—')} · próximo: ${esc(r.proximoContato || '—')}</div>
       ${r.obs ? `<div class="celula-sub">obs: ${esc(r.obs)}</div>` : ''}
@@ -932,7 +1175,12 @@ function salvarNovaRecall() {
     $('#nr-nome')?.focus();
     return;
   }
-  store.adicionarLinha('recall', {
+  // limpa filtros para a paciente nova aparecer na hora, no espelho da planilha
+  filtroRecall = 'todos';
+  buscaRecall = '';
+  const buscaEl = $('#busca-recall');
+  if (buscaEl) buscaEl.value = '';
+  const linha = store.adicionarLinha('recall', {
     nome,
     contato: $('#nr-fone').value.trim(),
     status: $('#nr-status').value,
@@ -941,7 +1189,17 @@ function salvarNovaRecall() {
     dataContato: fmtDataPlanilhaRecall(isoHoje()),
     obs: $('#nr-obs').value.trim(),
   });
+  ultimaNovaRecallKey = linha.key;
+  renderLinhasRecall();
   fechar('veu-nova-recall');
+  requestAnimationFrame(() => {
+    document
+      .querySelector(`#linhas-recall .linha[data-key="${linha.key}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  setTimeout(() => {
+    if (ultimaNovaRecallKey === linha.key) ultimaNovaRecallKey = '';
+  }, 2600);
   showToast(
     syncService.configured
       ? `${nome} salva — enviando para o Google Sheets…`
@@ -1170,6 +1428,76 @@ function initApp() {
     store,
     toast: showToast,
   });
+
+  // acesso rápido: recall / cirurgias & revisões / lembretes lado a lado
+  document.querySelectorAll('[data-ir]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const alvo = document.getElementById(b.dataset.ir);
+      if (!alvo) return;
+      alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      alvo.classList.remove('flash');
+      void alvo.offsetWidth;
+      alvo.classList.add('flash');
+      setTimeout(() => alvo.classList.remove('flash'), 1700);
+    }),
+  );
+  ajustarBarraFixa();
+  window.addEventListener('resize', ajustarBarraFixa);
+  window.addEventListener('load', ajustarBarraFixa);
+
+  // suporte → WhatsApp direto
+  const waSuporte = buildWhatsAppLink(
+    SUPORTE_WHATSAPP,
+    'Olá! Aqui é a Helen, da blue. Preciso de ajuda com a central da concierge.',
+  );
+  ['#btn-suporte', '#lnk-suporte'].forEach((sel) => {
+    const a = $(sel);
+    if (a) a.href = waSuporte;
+  });
+
+  // lembretes
+  $('#lem-novo')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.value.trim()) {
+      reminders.adicionar({ titulo: e.target.value.trim() });
+      e.target.value = '';
+      renderLembretes(); // o guard digitandoEm pula o render enquanto o input tem foco
+      showToast('lembrete criado — toque nele para data, prioridade e repetição');
+    }
+  });
+  $('#lem-toggle-feitos')?.addEventListener('click', () => {
+    feitosVisiveis = !feitosVisiveis;
+    renderLembretes();
+  });
+  $('#btn-lem-salvar')?.addEventListener('click', salvarLembrete);
+  $('#btn-lem-excluir')?.addEventListener('click', () => {
+    reminders.remover(lembreteAtual);
+    fechar('veu-lembrete');
+    showToast('lembrete excluído');
+  });
+  $('#btn-lem-ics')?.addEventListener('click', () => {
+    const l = reminders.get(lembreteAtual);
+    if (!l) return;
+    baixarIcs('lembrete-blue.ics', [l]);
+    showToast('arquivo baixado — abra no Mac para entrar no app Lembretes');
+  });
+  $('#btn-lem-exportar')?.addEventListener('click', () => {
+    if (!reminders.lista.length) {
+      showToast('nenhum lembrete para exportar');
+      return;
+    }
+    baixarIcs('lembretes-blue.ics', reminders.lista);
+    showToast('arquivo baixado — abra no Mac para importar tudo no app Lembretes');
+  });
+  $('#btn-lem-notif')?.addEventListener('click', async () => {
+    try {
+      const perm = await Notification.requestPermission();
+      showToast(perm === 'granted' ? 'notificações ativadas — os lembretes avisam na tela do Mac' : 'notificações não autorizadas pelo navegador');
+    } catch (_) {}
+    atualizarBotaoNotif();
+  });
+  atualizarBotaoNotif();
+  verificarNotificacoes();
+  setInterval(verificarNotificacoes, 30000);
 
   // ver detalhes (planilhas ocultas)
   [['recall', gridRecall], ['cirurgias', gridCirurgias]].forEach(([tipo, grid]) => {

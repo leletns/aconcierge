@@ -19,12 +19,29 @@
     <button class="filtro filtro-mes" id="btn-atencao-mes" type="button" title="mostrar só quem precisa de atenção este mês">🎯 atenção do mês</button>
     <button class="btn btn-claro" id="btn-exportar" type="button">exportar XLSX</button>
     <button class="btn btn-azul" id="btn-gestao" type="button">📊 resumo para gestão</button>
+    <a class="btn btn-suporte" id="btn-suporte" href="#" target="_blank" rel="noopener" title="falar com o suporte no WhatsApp"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .611.611l4.458-1.495A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.372l-.357-.212-3.028 1.015 1.015-3.028-.212-.357A9.818 9.818 0 1 1 12 21.818z"/></svg>suporte</a>
     <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>aguardando</span></div>
   </div>
 </header>
 
-<!-- ============ SMART ALERT ============ -->
-<div id="smart-alert"></div>
+<!-- ============ BARRA FIXA: acesso rápido + smart alert ============ -->
+<div class="barra-fixa">
+  <nav class="nav-acessos" aria-label="acesso rápido">
+    <button type="button" class="nav-acesso" data-ir="bloco-recall" title="ir direto para a planilha recall">
+      <span class="nav-texto">recall<span class="ponto">.</span></span>
+      <span class="nav-badge" id="badge-recall" hidden></span>
+    </button>
+    <button type="button" class="nav-acesso" data-ir="bloco-cirurgias" title="ir direto para cirurgias &amp; revisões">
+      <span class="nav-texto">cirurgias &amp; revisões<span class="ponto">.</span></span>
+      <span class="nav-badge" id="badge-cirurgias" hidden></span>
+    </button>
+    <button type="button" class="nav-acesso" data-ir="bloco-lembretes" title="ir direto para os lembretes">
+      <span class="nav-texto">lembretes<span class="ponto">.</span></span>
+      <span class="nav-badge" id="badge-lembretes" hidden></span>
+    </button>
+  </nav>
+  <div id="smart-alert"></div>
+</div>
 
 <!-- ============ PÁGINA ÚNICA ============ -->
 <main class="pagina">
@@ -68,6 +85,7 @@
         </div>
       </div>
     </div>
+    <div id="meses-cirurgias"></div>
     <div class="linhas cartao" id="linhas-cirurgias"></div>
     <button class="ver-detalhes" id="btn-det-cirurgias" type="button">▸ ver detalhes — planilha Cirurgias completa</button>
     <div class="detalhes" id="det-cirurgias" hidden>
@@ -76,11 +94,36 @@
     </div>
   </section>
 
+  <!-- ---------- bloco LEMBRETES ---------- -->
+  <section class="bloco" id="bloco-lembretes">
+    <div class="bloco-cabecalho">
+      <div>
+        <h1>lembretes<span class="ponto">.</span></h1>
+        <div class="sub">anotações com prioridade, data e repetição — exporte para o app Lembretes do Mac</div>
+      </div>
+      <div class="bloco-filtros">
+        <button class="btn btn-claro" id="btn-lem-notif" type="button" hidden>🔔 ativar notificações do Mac</button>
+        <button class="btn btn-claro" id="btn-lem-exportar" type="button" title="baixa um arquivo que entra direto no app Lembretes do Mac">⤓ exportar p/ app Lembretes</button>
+      </div>
+    </div>
+    <div class="cartao lembretes-cartao">
+      <div class="lem-add">
+        <input id="lem-novo" placeholder="＋ novo lembrete — escreva e tecle Enter" autocomplete="off">
+      </div>
+      <div id="linhas-lembretes"></div>
+      <button class="lem-toggle-feitos" id="lem-toggle-feitos" type="button" hidden></button>
+      <div id="linhas-lembretes-feitos" hidden></div>
+    </div>
+    <div class="lem-dica">💡 toque num lembrete para prioridade, horário e repetição · o botão ⤓ envia para o app Lembretes do Mac</div>
+  </section>
+
   <!-- ---------- rodapé técnico ---------- -->
   <footer class="rodape-tecnico">
     <button type="button" id="btn-acompanhamentos">⚙ acompanhamentos (prazos de revisão)</button>
     <span>·</span>
     <button type="button" id="btn-config">conectar planilhas</button>
+    <span>·</span>
+    <a id="lnk-suporte" href="#" target="_blank" rel="noopener">💬 suporte whatsapp</a>
     <span>·</span>
     <span class="rodape-atalhos"><kbd>⌘K</kbd> paciente · <kbd>⌘F</kbd> buscar · <kbd>Esc</kbd> fechar</span>
     <span class="rodape-marca">blue<span class="ponto">.</span> central da concierge</span>
@@ -216,6 +259,45 @@
     <div class="modal-rodape">
       <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-config').classList.remove('aberto')">cancelar</button>
       <button class="btn btn-azul" id="btn-salvar-config" type="button">conectar e sincronizar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: lembrete (estilo app Lembretes) ============ -->
+<div class="veu" id="veu-lembrete">
+  <div class="modal">
+    <h3>lembrete<span class="ponto">.</span></h3>
+    <div class="modal-sub">igual ao app Lembretes: prioridade, quando lembrar e repetição</div>
+    <div class="campo-grupo"><label>título</label><input class="campo" id="lem-titulo" placeholder="ex.: pedir resultado de exames da Mariana"></div>
+    <div class="campo-grupo"><label>notas</label><textarea class="campo" id="lem-notas" rows="2" placeholder="detalhes (opcional)"></textarea></div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>prioridade</label>
+        <select class="campo" id="lem-prio">
+          <option value="nenhuma">nenhuma</option>
+          <option value="baixa">! baixa</option>
+          <option value="media">!! média</option>
+          <option value="alta">!!! alta</option>
+        </select>
+      </div>
+      <div class="campo-grupo"><label>repetir</label>
+        <select class="campo" id="lem-repetir">
+          <option value="nunca">nunca</option>
+          <option value="diario">todos os dias</option>
+          <option value="semanal">toda semana</option>
+          <option value="quinzenal">a cada 2 semanas</option>
+          <option value="mensal">todo mês</option>
+          <option value="anual">todo ano</option>
+        </select>
+      </div>
+    </div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>lembrar em (data)</label><input class="campo" type="date" id="lem-data"></div>
+      <div class="campo-grupo"><label>hora (opcional)</label><input class="campo" type="time" id="lem-hora"></div>
+    </div>
+    <div class="modal-rodape rodape-lembrete">
+      <button class="btn btn-fantasma btn-perigo" id="btn-lem-excluir" type="button">excluir</button>
+      <button class="btn btn-claro" id="btn-lem-ics" type="button" title="baixa o arquivo — ao abrir no Mac, entra no app Lembretes">⤓ p/ app Lembretes</button>
+      <button class="btn btn-azul" id="btn-lem-salvar" type="button">salvar</button>
     </div>
   </div>
 </div>

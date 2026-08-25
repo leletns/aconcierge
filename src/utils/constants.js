@@ -95,3 +95,28 @@ export const DEFAULT_TEMPLATES = [
 export const STORAGE_KEY = 'blue_central_helen_v3';
 export const CONFIG_KEY = 'blue_central_config';
 export const QUEUE_KEY = 'blue_sync_queue_v3';
+export const LEMBRETES_KEY = 'blue_lembretes_v1';
+
+/** WhatsApp do suporte (Rafael) — botão "suporte" abre conversa direta */
+export const SUPORTE_WHATSAPP = '5521996533803';
+
+/**
+ * Lembretes — mesmo vocabulário do app Lembretes do Mac.
+ * `peso` segue o PRIORITY do iCalendar (RFC 5545): 1 alta · 5 média · 9 baixa.
+ */
+export const PRIORIDADES_LEMBRETE = [
+  { id: 'nenhuma', label: 'nenhuma', sinais: '', peso: 0 },
+  { id: 'baixa', label: 'baixa', sinais: '!', peso: 9 },
+  { id: 'media', label: 'média', sinais: '!!', peso: 5 },
+  { id: 'alta', label: 'alta', sinais: '!!!', peso: 1 },
+];
+
+/** Frequências de repetição — `rrule` é o equivalente iCalendar (app Lembretes) */
+export const REPETICAO_LEMBRETE = [
+  { id: 'nunca', label: 'nunca', rrule: '' },
+  { id: 'diario', label: 'todos os dias', rrule: 'FREQ=DAILY' },
+  { id: 'semanal', label: 'toda semana', rrule: 'FREQ=WEEKLY' },
+  { id: 'quinzenal', label: 'a cada 2 semanas', rrule: 'FREQ=WEEKLY;INTERVAL=2' },
+  { id: 'mensal', label: 'todo mês', rrule: 'FREQ=MONTHLY' },
+  { id: 'anual', label: 'todo ano', rrule: 'FREQ=YEARLY' },
+];
