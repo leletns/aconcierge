@@ -113,6 +113,15 @@ export class RemindersStore {
     this._persist();
   }
 
+  /** apaga definitivamente todos os concluídos (botão "limpar", como no Mac) */
+  limparConcluidos() {
+    const n = this.lembretes.filter((l) => l.feito).length;
+    if (!n) return 0;
+    this.lembretes = this.lembretes.filter((l) => !l.feito);
+    this._persist();
+    return n;
+  }
+
   /** concluir lembrete com repetição → pula para a próxima data (como no Mac) */
   alternarFeito(id) {
     const l = this.get(id);
