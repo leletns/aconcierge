@@ -15,11 +15,12 @@
   --coral-fundo:#F6E9E6;
   --sombra:0 1px 2px rgba(43,52,64,.04), 0 8px 24px rgba(43,52,64,.06);
   --raio:14px;
+  --fonte-app:'Montserrat',-apple-system,BlinkMacSystemFont,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{font-size:15px}
 body{
-  font-family:'Montserrat',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-family:var(--fonte-app);
   background:var(--creme);
   color:var(--tinta);
   -webkit-font-smoothing:antialiased;
@@ -276,6 +277,21 @@ input.linha-obs:focus{outline:none;border-color:var(--azul);background:var(--pap
 .rodape-lembrete{justify-content:flex-end}
 .rodape-lembrete .btn-perigo{color:var(--coral);margin-right:auto}
 .rodape-lembrete .btn-perigo:hover{background:var(--coral-fundo)}
+
+/* ---------- seletor de fonte ---------- */
+.fonte-picker{
+  display:flex;align-items:center;gap:6px;background:var(--papel);
+  border:1px solid var(--linha);border-radius:10px;padding:0 8px 0 11px;
+  color:var(--tinta-suave);transition:border-color .15s;
+}
+.fonte-picker:hover{border-color:var(--azul)}
+.fonte-icone{font-size:.85rem;font-weight:600;letter-spacing:-.02em}
+#sel-fonte{
+  font-family:inherit;font-size:.78rem;font-weight:500;color:var(--tinta);
+  border:none;background:transparent;padding:9px 2px;cursor:pointer;
+  max-width:170px;text-overflow:ellipsis;
+}
+#sel-fonte:focus{outline:none}
 
 /* ---------- botão suporte (WhatsApp) ---------- */
 .btn-suporte{background:#25D366;color:#fff;text-decoration:none}
@@ -694,7 +710,7 @@ tr.linha-vencida td{background:rgba(196,107,92,.06)}
 #cartao-gestao{padding:34px 38px 26px}
 .gestao-topo{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:22px;flex-wrap:wrap}
 .gestao-logo{
-  font-family:'Montserrat',sans-serif;font-weight:200;font-size:3rem;line-height:.9;
+  font-family:var(--fonte-app);font-weight:200;font-size:3rem;line-height:.9;
   letter-spacing:-.02em;color:#1B2733;
 }
 .gestao-ponto{color:#5B87B4}
