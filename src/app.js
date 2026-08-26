@@ -600,30 +600,24 @@ function bindLinhasCirurgias(el) {
   bindWa(el);
 }
 
-/* ---------- LEMBRETES (estilo app Lembretes do Mac) ---------- */
+/* ---------- LEMBRETES (fiel ao app Lembretes do Mac/iOS) ---------- */
 
+/** cabeçalho de seção por data — "Hoje", "Amanhã", "seg., 24 de ago." (vermelho se vencida) */
+function secaoLembrete(iso) {
+  const dd = difDias(iso);
+  if (dd === 0) return { texto: 'Hoje', vencida: false };
+  if (dd === 1) return { texto: 'Amanhã', vencida: false };
+  const d = paraData(iso);
+  const texto = d
+    .toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
+    .replace(/\./g, '');
+  return { texto, vencida: dd < 0 };
+}
+
+/** linha de meta sob o título: hora + repetição (a data é o cabeçalho da seção) */
 function metaLembrete(l) {
   const partes = [];
-  if (l.dataISO) {
-    const dd = difDias(l.dataISO);
-    let texto;
-    let classe = '';
-    if (dd < 0) {
-      texto = dd === -1 ? 'ontem' : `venceu há ${Math.abs(dd)}d`;
-      classe = 'lem-vencido';
-    } else if (dd === 0) {
-      texto = 'hoje';
-      classe = 'lem-hoje';
-    } else if (dd === 1) {
-      texto = 'amanhã';
-    } else {
-      texto = fmt(l.dataISO);
-    }
-    if (l.hora) texto += ` · ${l.hora}`;
-    partes.push(`<span class="${classe}">${esc(texto)}</span>`);
-  } else {
-    partes.push('<span>sem data</span>');
-  }
+  if (l.hora) partes.push(`<span>${esc(l.hora)}</span>`);
   if (l.repetir && l.repetir !== 'nunca') {
     partes.push(`<span>↻ ${esc(repeticaoDe(l.repetir).label)}</span>`);
   }
@@ -632,11 +626,12 @@ function metaLembrete(l) {
 
 function lembreteHtml(l) {
   const prio = prioridadeDe(l.prioridade);
+  const meta = metaLembrete(l);
   return `<div class="lem ${l.feito ? 'feito' : ''}" data-lem="${l.id}">
-    <button type="button" class="lem-check" data-lem-check="${l.id}" title="${l.feito ? 'reabrir' : l.repetir !== 'nunca' && l.dataISO ? 'concluir — remarca para a próxima data' : 'concluir'}"></button>
+    <button type="button" class="lem-check" data-lem-check="${l.id}" title="${l.feito ? 'reabrir' : l.repetir !== 'nunca' && l.dataISO ? 'concluir — remarca para a próxima data' : 'concluir'}"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5.4 4.3 8.7 11 1.3"/></svg></button>
     <div class="lem-corpo" data-lem-edit="${l.id}" title="toque para editar prioridade, data e repetição">
-      <div class="lem-titulo">${prio.sinais ? `<span class="lem-prio prio-${prio.id}">${prio.sinais}</span>` : ''}${esc(l.titulo)}</div>
-      <div class="lem-meta">${metaLembrete(l)}</div>
+      <div class="lem-titulo">${prio.sinais ? `<span class="lem-prio">${prio.sinais}</span>` : ''}<span>${esc(l.titulo)}</span></div>
+      ${meta ? `<div class="lem-meta">${meta}</div>` : ''}
       ${l.notas ? `<div class="lem-notas">${esc(l.notas)}</div>` : ''}
     </div>
     <button type="button" class="lem-ics" data-lem-ics="${l.id}" title="enviar para o app Lembretes do Mac">⤓</button>
@@ -658,19 +653,40 @@ function renderLembretes() {
     });
   const feitos = reminders.lista.filter((l) => l.feito).sort((a, b) => (a.concluidoEm > b.concluidoEm ? -1 : 1));
 
-  el.innerHTML = abertos.length
-    ? abertos.map(lembreteHtml).join('')
+  // agrupa por data — seções "Hoje", "Amanhã", "seg., 24 de ago." como no app do Mac
+  const secoes = [];
+  let grupo = null;
+  for (const l of abertos) {
+    const chave = l.dataISO || '';
+    if (!grupo || grupo.chave !== chave) {
+      grupo = { chave, itens: [] };
+      secoes.push(grupo);
+    }
+    grupo.itens.push(l);
+  }
+
+  el.innerHTML = secoes.length
+    ? secoes
+        .map((g) => {
+          const sec = g.chave ? secaoLembrete(g.chave) : { texto: 'Sem data', vencida: false };
+          return `<div class="lem-grupo">
+            <div class="lem-secao ${sec.vencida ? 'vencida' : ''}">${esc(sec.texto)}</div>
+            ${g.itens.map(lembreteHtml).join('')}
+          </div>`;
+        })
+        .join('')
     : `<div class="vazio"><strong>nenhum lembrete</strong>escreva acima e tecle Enter — como no app Lembretes</div>`;
 
+  const rodape = $('#lem-rodape');
   const toggle = $('#lem-toggle-feitos');
   const caixa = $('#linhas-lembretes-feitos');
   if (feitos.length) {
-    toggle.hidden = false;
+    rodape.hidden = false;
     toggle.textContent = `${feitosVisiveis ? '▾' : '▸'} concluídos (${feitos.length})`;
     caixa.hidden = !feitosVisiveis;
-    caixa.innerHTML = feitosVisiveis ? feitos.map(lembreteHtml).join('') : '';
+    caixa.innerHTML = feitosVisiveis ? `<div class="lem-grupo">${feitos.map(lembreteHtml).join('')}</div>` : '';
   } else {
-    toggle.hidden = true;
+    rodape.hidden = true;
     caixa.hidden = true;
     caixa.innerHTML = '';
   }
@@ -1467,6 +1483,13 @@ function initApp() {
   $('#lem-toggle-feitos')?.addEventListener('click', () => {
     feitosVisiveis = !feitosVisiveis;
     renderLembretes();
+  });
+  $('#lem-limpar-feitos')?.addEventListener('click', () => {
+    const n = reminders.lista.filter((l) => l.feito).length;
+    if (!n) return;
+    if (!confirm(`Apagar definitivamente ${n} lembrete(s) concluído(s)?`)) return;
+    reminders.limparConcluidos();
+    showToast('concluídos apagados');
   });
   $('#btn-lem-salvar')?.addEventListener('click', salvarLembrete);
   $('#btn-lem-excluir')?.addEventListener('click', () => {
