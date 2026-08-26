@@ -96,6 +96,23 @@ export const STORAGE_KEY = 'blue_central_helen_v3';
 export const CONFIG_KEY = 'blue_central_config';
 export const QUEUE_KEY = 'blue_sync_queue_v3';
 export const LEMBRETES_KEY = 'blue_lembretes_v1';
+export const FONTE_KEY = 'blue_fonte_v1';
+
+/**
+ * Fontes do sistema — Helen escolhe no topo (Aa). A primeira é o padrão.
+ * `stack` é aplicado na var --fonte-app; famílias Google entram no <link> do index.html
+ * (o navegador só baixa o arquivo da fonte quando ela é usada de fato).
+ */
+export const FONTES_APP = [
+  { id: 'montserrat', label: 'Montserrat (original)', stack: "'Montserrat',-apple-system,BlinkMacSystemFont,sans-serif" },
+  { id: 'sf', label: 'San Francisco (Mac)', stack: "-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif" },
+  { id: 'inter', label: 'Inter', stack: "'Inter',-apple-system,BlinkMacSystemFont,sans-serif" },
+  { id: 'dm-sans', label: 'DM Sans', stack: "'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif" },
+  { id: 'work-sans', label: 'Work Sans', stack: "'Work Sans',-apple-system,BlinkMacSystemFont,sans-serif" },
+  { id: 'nunito', label: 'Nunito (redonda)', stack: "'Nunito',-apple-system,BlinkMacSystemFont,sans-serif" },
+  { id: 'quicksand', label: 'Quicksand (leve)', stack: "'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif" },
+  { id: 'poppins', label: 'Poppins (elegante)', stack: "'Poppins',-apple-system,BlinkMacSystemFont,sans-serif" },
+];
 
 /** WhatsApp do suporte (Rafael) — botão "suporte" abre conversa direta */
 export const SUPORTE_WHATSAPP = '5521996533803';

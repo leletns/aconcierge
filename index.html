@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#F4F1EB">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..700&family=Inter:wght@300..700&family=Montserrat:wght@200..700&family=Nunito:wght@300..700&family=Poppins:wght@300;400;500;600;700&family=Quicksand:wght@300..700&family=Work+Sans:wght@300..700&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -16,6 +16,10 @@
 <header class="topo">
   <div class="wordmark"><span class="logo-thin">blue</span><span class="ponto"> .</span><small>central da concierge</small></div>
   <div class="topo-acoes">
+    <div class="fonte-picker" title="mudar a fonte do sistema (só neste Mac)">
+      <span class="fonte-icone" aria-hidden="true">Aa</span>
+      <select id="sel-fonte" aria-label="fonte do sistema"></select>
+    </div>
     <button class="filtro filtro-mes" id="btn-atencao-mes" type="button" title="mostrar só quem precisa de atenção este mês">🎯 atenção do mês</button>
     <button class="btn btn-claro" id="btn-exportar" type="button">exportar XLSX</button>
     <button class="btn btn-azul" id="btn-gestao" type="button">📊 resumo para gestão</button>

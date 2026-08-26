@@ -13,6 +13,8 @@ import {
   SUPORTE_WHATSAPP,
   PRIORIDADES_LEMBRETE,
   REPETICAO_LEMBRETE,
+  FONTES_APP,
+  FONTE_KEY,
 } from './utils/constants.js';
 import { esc, iniciais, debounce } from './utils/helpers.js';
 import {
@@ -232,6 +234,37 @@ function atualizarNavBadges() {
 function ajustarBarraFixa() {
   const topo = $('.topo');
   if (topo) document.documentElement.style.setProperty('--topo-h', topo.offsetHeight + 'px');
+}
+
+/* ---------- fonte do sistema (preferência da Helen, salva no Mac) ---------- */
+
+function aplicarFonte(id) {
+  const f = FONTES_APP.find((x) => x.id === id) || FONTES_APP[0];
+  document.documentElement.style.setProperty('--fonte-app', f.stack);
+  try {
+    localStorage.setItem(FONTE_KEY, f.id);
+  } catch (_) {}
+  return f;
+}
+
+function initFonte() {
+  const sel = $('#sel-fonte');
+  if (!sel) return;
+  // cada opção renderiza no próprio tipo de letra — ela vê a prévia ao abrir
+  sel.innerHTML = FONTES_APP.map(
+    (f) => `<option value="${f.id}" style="font-family:${f.stack.replace(/"/g, '&quot;')}">${esc(f.label)}</option>`,
+  ).join('');
+  let salva = FONTES_APP[0].id;
+  try {
+    salva = localStorage.getItem(FONTE_KEY) || salva;
+  } catch (_) {}
+  sel.value = salva;
+  aplicarFonte(salva);
+  sel.addEventListener('change', () => {
+    const f = aplicarFonte(sel.value);
+    ajustarBarraFixa();
+    showToast(`fonte: ${f.label} — fica salva neste Mac`);
+  });
 }
 
 /* ---------- SMART ALERT (só o que é crítico: recall do dia + cirurgias próximas) ---------- */
@@ -1460,6 +1493,7 @@ function initApp() {
   ajustarBarraFixa();
   window.addEventListener('resize', ajustarBarraFixa);
   window.addEventListener('load', ajustarBarraFixa);
+  initFonte();
 
   // suporte → WhatsApp direto
   const waSuporte = buildWhatsAppLink(
