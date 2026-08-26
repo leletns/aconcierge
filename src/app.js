@@ -750,38 +750,48 @@ function bindLembretes(root) {
   );
 }
 
-function abrirLembrete(id) {
-  const l = reminders.get(id);
-  if (!l) return;
-  lembreteAtual = id;
-  $('#lem-titulo').value = l.titulo;
-  $('#lem-notas').value = l.notas || '';
-  $('#lem-prio').value = l.prioridade || 'nenhuma';
-  $('#lem-repetir').value = l.repetir || 'nunca';
-  $('#lem-data').value = l.dataISO || '';
-  $('#lem-hora').value = l.hora || '';
+/** abre a folha de detalhes — sem id = modo "novo lembrete" (cria ao salvar) */
+function abrirLembrete(id, tituloInicial = '') {
+  const l = id ? reminders.get(id) : null;
+  lembreteAtual = l ? id : null;
+  $('#lem-titulo').value = l ? l.titulo : tituloInicial;
+  $('#lem-notas').value = l?.notas || '';
+  $('#lem-prio').value = l?.prioridade || 'nenhuma';
+  $('#lem-repetir').value = l?.repetir || 'nunca';
+  $('#lem-data').value = l?.dataISO || '';
+  $('#lem-hora').value = l?.hora || '';
+  const novo = !l;
+  const h3 = $('#veu-lembrete h3');
+  if (h3) h3.innerHTML = `${novo ? 'novo lembrete' : 'lembrete'}<span class="ponto">.</span>`;
+  const btnExcluir = $('#btn-lem-excluir');
+  if (btnExcluir) btnExcluir.textContent = novo ? 'cancelar' : 'excluir';
+  const btnIcs = $('#btn-lem-ics');
+  if (btnIcs) btnIcs.style.display = novo ? 'none' : '';
   abrir('veu-lembrete');
+  setTimeout(() => $('#lem-titulo')?.focus(), 60);
 }
 
 function salvarLembrete() {
-  const l = reminders.get(lembreteAtual);
-  if (!l) return;
   const titulo = $('#lem-titulo').value.trim();
   if (!titulo) {
     showToast('dê um título ao lembrete');
     $('#lem-titulo')?.focus();
     return;
   }
-  reminders.atualizar(lembreteAtual, {
+  const dados = {
     titulo,
     notas: $('#lem-notas').value.trim(),
     prioridade: $('#lem-prio').value,
     repetir: $('#lem-repetir').value,
     dataISO: $('#lem-data').value,
     hora: $('#lem-hora').value,
-  });
+  };
+  const editando = lembreteAtual && reminders.get(lembreteAtual);
+  if (editando) reminders.atualizar(lembreteAtual, dados);
+  else reminders.adicionar(dados);
+  lembreteAtual = null;
   fechar('veu-lembrete');
-  showToast('lembrete salvo');
+  showToast(editando ? 'lembrete salvo' : 'lembrete criado');
 }
 
 function verificarNotificacoes() {
@@ -1505,13 +1515,14 @@ function initApp() {
     if (a) a.href = waSuporte;
   });
 
-  // lembretes
+  // lembretes — ⊕ abre a fichinha; Enter cria e já abre os detalhes
+  $('#lem-add-btn')?.addEventListener('click', () => abrirLembrete());
   $('#lem-novo')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.value.trim()) {
-      reminders.adicionar({ titulo: e.target.value.trim() });
+      const l = reminders.adicionar({ titulo: e.target.value.trim() });
       e.target.value = '';
       renderLembretes(); // o guard digitandoEm pula o render enquanto o input tem foco
-      showToast('lembrete criado — toque nele para data, prioridade e repetição');
+      abrirLembrete(l.id);
     }
   });
   $('#lem-toggle-feitos')?.addEventListener('click', () => {
@@ -1527,7 +1538,12 @@ function initApp() {
   });
   $('#btn-lem-salvar')?.addEventListener('click', salvarLembrete);
   $('#btn-lem-excluir')?.addEventListener('click', () => {
+    if (!lembreteAtual) {
+      fechar('veu-lembrete'); // modo "novo" → o botão é "cancelar"
+      return;
+    }
     reminders.remover(lembreteAtual);
+    lembreteAtual = null;
     fechar('veu-lembrete');
     showToast('lembrete excluído');
   });
