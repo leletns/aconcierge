@@ -486,13 +486,21 @@ function revisoesPorMes() {
   return mapa;
 }
 
-/** anos com cirurgia real na planilha (data da coluna Data — não revisões) */
+/** extrai o ano civil da coluna Data (parse + fallback no texto da planilha) */
+function anoDaCirurgia(c) {
+  const iso = parseDataPt(c.data);
+  if (iso) return iso.slice(0, 4);
+  const m = String(c.data || '').match(/\b(20\d{2})\b/);
+  return m ? m[1] : '';
+}
+
+/** anos com cirurgia real na planilha (coluna Data) */
 function anosCirurgias() {
   const anos = new Set();
   for (const c of store.cirurgias) {
     if (!String(c.paciente || '').trim()) continue;
-    const iso = parseDataPt(c.data);
-    if (iso) anos.add(iso.slice(0, 4));
+    const ano = anoDaCirurgia(c);
+    if (ano) anos.add(ano);
   }
   return [...anos].sort();
 }
@@ -503,14 +511,14 @@ function garantirAnoCirurgias() {
     anoCirurgias = '';
     return;
   }
+  // mantém o filtro escolhido; padrão = todas (espelho completo da planilha)
   if (anoCirurgias && anos.includes(anoCirurgias)) return;
-  const hoje = isoHoje().slice(0, 4);
-  anoCirurgias = anos.includes(hoje) ? hoje : anos[anos.length - 1];
+  anoCirurgias = '';
 }
 
 function cirurgiasVisiveis() {
   let rows = store.cirurgias.filter((c) => String(c.paciente || '').trim());
-  if (anoCirurgias) rows = rows.filter((c) => parseDataPt(c.data)?.startsWith(anoCirurgias));
+  if (anoCirurgias) rows = rows.filter((c) => anoDaCirurgia(c) === anoCirurgias);
   rows.sort((a, b) => {
     const ra = a.row ?? Number.MAX_SAFE_INTEGER;
     const rb = b.row ?? Number.MAX_SAFE_INTEGER;
@@ -531,18 +539,22 @@ function renderFiltrosAnoCirurgias() {
     el.innerHTML = '';
     return;
   }
-  el.innerHTML = anos
-    .map((a) => {
-      const n = store.cirurgias.filter((c) => {
-        if (!String(c.paciente || '').trim()) return false;
-        return parseDataPt(c.data)?.startsWith(a);
-      }).length;
-      return `<button type="button" class="filtro ${a === anoCirurgias ? 'ativo' : ''}" data-ano="${a}">${a} <span class="n">${n}</span></button>`;
-    })
-    .join('');
+  const total = store.cirurgias.filter((c) => String(c.paciente || '').trim()).length;
+  const btnTodas = `<button type="button" class="filtro ${!anoCirurgias ? 'ativo' : ''}" data-ano="">todas <span class="n">${total}</span></button>`;
+  el.innerHTML =
+    btnTodas +
+    anos
+      .map((a) => {
+        const n = store.cirurgias.filter((c) => {
+          if (!String(c.paciente || '').trim()) return false;
+          return anoDaCirurgia(c) === a;
+        }).length;
+        return `<button type="button" class="filtro ${a === anoCirurgias ? 'ativo' : ''}" data-ano="${a}">${a} <span class="n">${n}</span></button>`;
+      })
+      .join('');
   el.querySelectorAll('[data-ano]').forEach((b) =>
     b.addEventListener('click', () => {
-      anoCirurgias = b.dataset.ano;
+      anoCirurgias = b.dataset.ano || '';
       renderCirurgias();
     }),
   );
