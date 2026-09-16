@@ -180,6 +180,17 @@ input.linha-obs:focus{outline:none;border-color:var(--azul);background:var(--pap
 .grade-rodape-compacto{justify-content:center;margin-top:10px}
 .grade-rodape-compacto .grade-dica{text-align:center}
 
+.zona-solta{
+  border:2px dashed var(--linha);border-radius:14px;padding:28px 20px;text-align:center;
+  color:var(--tinta-suave);font-size:.88rem;cursor:pointer;transition:border-color .15s,background .15s;
+}
+.zona-solta:hover,.zona-solta.arrastando{border-color:var(--azul);background:var(--azul-fundo);color:var(--azul-escuro)}
+.imp-cir-preview{
+  margin-top:14px;padding:12px 14px;border-radius:10px;background:var(--azul-fundo);
+  font-size:.82rem;color:var(--tinta);line-height:1.5;
+}
+.imp-cir-preview strong{display:block;margin-bottom:4px;color:var(--azul-escuro)}
+
 .meses-rotulo{
   font-size:.66rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
   color:var(--tinta-suave);

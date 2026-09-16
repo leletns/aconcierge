@@ -104,6 +104,7 @@
           <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <input type="search" id="busca-cirurgias" placeholder="buscar… (⌘F)">
         </div>
+        <button class="btn btn-claro" id="btn-importar-cirurgias" type="button" title="carregar .xlsx exportado do OneDrive ou Excel">⤒ importar planilha</button>
         <button class="btn btn-azul" id="btn-nova-cirurgia" type="button">＋ nova cirurgia</button>
       </div>
     </div>
@@ -152,6 +153,21 @@
   </footer>
 
 </main>
+
+<!-- ============ modal: importar planilha Cirurgias (.xlsx / OneDrive) ============ -->
+<div class="veu" id="veu-import-cirurgias">
+  <div class="modal">
+    <h3>importar planilha de cirurgias<span class="ponto">.</span></h3>
+    <div class="modal-sub">no OneDrive: <strong>Arquivo → Salvar como → Baixar uma cópia (.xlsx)</strong> · depois selecione o arquivo aqui</div>
+    <div class="zona-solta" id="imp-cir-zona">solte o .xlsx aqui ou clique para escolher</div>
+    <input type="file" id="imp-cir-arquivo" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    <div class="imp-cir-preview" id="imp-cir-preview" hidden></div>
+    <div class="modal-rodape">
+      <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-import-cirurgias').classList.remove('aberto')">cancelar</button>
+      <button class="btn btn-azul" id="btn-imp-cir-confirmar" type="button" disabled>substituir cirurgias no app</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============ modal: ficha unificada ============ -->
 <div class="veu" id="veu-ficha">
