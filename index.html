@@ -105,6 +105,7 @@
           <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <input type="search" id="busca-cirurgias" placeholder="buscar…">
         </div>
+        <button class="btn btn-azul" id="btn-nova-cirurgia" type="button">＋ nova cirurgia</button>
       </div>
     </div>
     <div id="meses-cirurgias"></div>
@@ -231,6 +232,36 @@
     <div class="tpl-lista" id="acompanhamentos-lista"></div>
     <div class="modal-rodape">
       <button class="btn btn-azul" id="btn-acomp-fechar" type="button">fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: nova cirurgia (processo completo no app) ============ -->
+<div class="veu" id="veu-nova-cirurgia">
+  <div class="modal">
+    <h3>nova cirurgia<span class="ponto">.</span></h3>
+    <div class="modal-sub">cadastra o processo cirúrgico inteiro — revisões, pré-op e ficha — sem abrir a planilha</div>
+    <div class="campo-grupo"><label>nome da paciente</label><input class="campo" id="nc-nome" placeholder="ex.: Mariana Duarte" autocomplete="name"></div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>WhatsApp (opcional)</label><input class="campo" id="nc-fone" placeholder="21 99999-0000" inputmode="tel"></div>
+      <div class="campo-grupo"><label>data da cirurgia</label><input class="campo" type="date" id="nc-data"></div>
+    </div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>procedimento</label><input class="campo" id="nc-cirurgia" placeholder="ex.: Abdominoplastia + Lipo"></div>
+      <div class="campo-grupo"><label>hospital</label><input class="campo" id="nc-hospital" placeholder="ex.: Hospital Copa Star"></div>
+    </div>
+    <div class="linha-campos">
+      <div class="campo-grupo"><label>template de revisão</label>
+        <select class="campo" id="nc-template"></select>
+      </div>
+      <div class="campo-grupo nc-recall-wrap">
+        <label>&nbsp;</label>
+        <label class="nc-recall-check"><input type="checkbox" id="nc-recall" checked> criar linha no recall (se tiver WhatsApp)</label>
+      </div>
+    </div>
+    <div class="modal-rodape">
+      <button class="btn btn-fantasma" type="button" onclick="document.getElementById('veu-nova-cirurgia').classList.remove('aberto')">cancelar</button>
+      <button class="btn btn-azul" id="btn-salvar-nova-cirurgia" type="button">salvar cirurgia</button>
     </div>
   </div>
 </div>

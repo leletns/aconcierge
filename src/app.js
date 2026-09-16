@@ -69,6 +69,7 @@ let anoRevisao = isoHoje().slice(0, 4);
 let ordemCirurgias = 'planilha'; // 'planilha' (linha do Sheets) | 'data'
 let conversaSuporte = [];
 let ultimaNovaRecallKey = ''; // destaque da paciente recém-registrada
+let ultimaNovaCirurgiaKey = ''; // destaque da cirurgia recém-cadastrada
 let lembreteAtual = null;
 let feitosVisiveis = false;
 const detalhesAbertos = { recall: false, cirurgias: false };
@@ -113,7 +114,7 @@ const gridCirurgias = new SpreadsheetGrid({
   statusField: 'm3m',
   getRows: () => store.cirurgias,
   onEdit: (key, field, value) => store.editarCelula('cirurgias', key, field, value),
-  onAddRow: () => store.adicionarLinha('cirurgias'),
+  onAddRow: () => abrirNovaCirurgia(),
   onOpenFicha: (linha) => abrirFichaDaLinha(linha, 'cirurgias'),
   headerLabel: headerLabelCirurgias,
 });
@@ -657,7 +658,7 @@ function renderLinhasCirurgias() {
             dataHtml = `<span class="linha-data">—</span>`;
           }
 
-          return `<div class="linha" data-key="${c.key}">
+          return `<div class="linha ${c.key === ultimaNovaCirurgiaKey ? 'linha-nova' : ''}" data-key="${c.key}">
         <div class="linha-nome" data-ficha-cir="${c.key}" title="abrir ficha">
           ${esc(c.paciente)}
           <span class="linha-sub" title="${esc(c.cirurgia || '')}">${esc((c.cirurgia || '').slice(0, 60))}${(c.cirurgia || '').length > 60 ? '…' : ''}</span>
@@ -1635,6 +1636,92 @@ function salvarNovaRecall() {
   );
 }
 
+/* ---------- NOVA CIRURGIA (processo completo no app) ---------- */
+
+function abrirNovaCirurgia() {
+  $('#nc-nome').value = '';
+  $('#nc-fone').value = '';
+  $('#nc-data').value = isoHoje();
+  $('#nc-cirurgia').value = '';
+  $('#nc-hospital').value = '';
+  $('#nc-recall').checked = true;
+  const tplEl = $('#nc-template');
+  if (tplEl) {
+    const padrao = store.appConfig.templates.find((t) => t.padrao)?.id || '';
+    tplEl.innerHTML = store.appConfig.templates
+      .map((t) => `<option value="${t.id}" ${t.padrao ? 'selected' : ''}>${esc(t.nome)}${t.padrao ? ' (padrão)' : ''}</option>`)
+      .join('');
+    tplEl.value = padrao;
+  }
+  abrir('veu-nova-cirurgia');
+  setTimeout(() => $('#nc-nome')?.focus(), 60);
+}
+
+function salvarNovaCirurgia() {
+  const nome = $('#nc-nome').value.trim();
+  if (!nome) {
+    showToast('informe o nome da paciente');
+    $('#nc-nome')?.focus();
+    return;
+  }
+  const cirurgia = $('#nc-cirurgia').value.trim();
+  if (!cirurgia) {
+    showToast('informe o procedimento');
+    $('#nc-cirurgia')?.focus();
+    return;
+  }
+  const iso = $('#nc-data').value || isoHoje();
+  const fone = $('#nc-fone').value.trim();
+  const tplId = $('#nc-template')?.value || '';
+  const padrao = store.appConfig.templates.find((t) => t.padrao)?.id || '';
+  const criarRecall = $('#nc-recall')?.checked && fone;
+
+  filtroCirurgias = 'todas';
+  mesRevisao = '';
+  buscaCirurgias = '';
+  const buscaEl = $('#busca-cirurgias');
+  if (buscaEl) buscaEl.value = '';
+
+  const linha = store.adicionarLinha('cirurgias', {
+    paciente: nome,
+    cirurgia,
+    hospital: $('#nc-hospital').value.trim(),
+    data: fmtDataPlanilhaCirurgias(iso),
+  });
+
+  const pKey = patientKey(nome);
+  if (tplId && tplId !== padrao) store.atribuirTemplate(pKey, tplId);
+
+  if (criarRecall) {
+    store.adicionarLinha('recall', {
+      nome,
+      contato: fone,
+      status: 'Pendente',
+      dataContato: fmtDataPlanilhaRecall(isoHoje()),
+    });
+  }
+
+  ultimaNovaCirurgiaKey = linha.key;
+  anoRevisao = iso.slice(0, 4);
+  renderLinhasCirurgias();
+  fechar('veu-nova-cirurgia');
+  requestAnimationFrame(() => {
+    document
+      .querySelector(`#linhas-cirurgias .linha[data-key="${linha.key}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  setTimeout(() => {
+    if (ultimaNovaCirurgiaKey === linha.key) ultimaNovaCirurgiaKey = '';
+  }, 2600);
+
+  const futura = difDias(iso) >= 0;
+  showToast(
+    syncService.configured
+      ? `${nome} — ${futura ? 'pré-op' : 'pós-op'} salva · enviando para o Google Sheets…`
+      : `${nome} salva localmente — conecte as planilhas para sincronizar`,
+  );
+}
+
 /* ---------- REGISTRAR CONTATO ---------- */
 
 function abrirContato(recallKey) {
@@ -2085,6 +2172,8 @@ function initApp() {
   $('#btn-salvar-contato')?.addEventListener('click', salvarContato);
   $('#btn-nova-recall')?.addEventListener('click', abrirNovaRecall);
   $('#btn-salvar-nova-recall')?.addEventListener('click', salvarNovaRecall);
+  $('#btn-nova-cirurgia')?.addEventListener('click', abrirNovaCirurgia);
+  $('#btn-salvar-nova-cirurgia')?.addEventListener('click', salvarNovaCirurgia);
 
   document.querySelectorAll('.veu').forEach((v) =>
     v.addEventListener('mousedown', (e) => {

@@ -19,13 +19,17 @@ Centraliza **Recall** + **Cirurgias** + **retornos pós-op** + **checklist pré-
 | Tela | Para que serve | Quando usar |
 |------|----------------|-------------|
 | **recall** | Lista + grade editável = planilha GESTÃO DE RECALL | Contatar / atualizar status / próximo contato |
-| **cirurgias & revisões** | Cirurgias + régua **revisões por mês** + grade Cirurgias BLUE | Ver quem tem revisão em cada mês; status 03m/06m/1a |
+| **cirurgias & revisões** | Cirurgias + régua **revisões por mês** (anos 2025/2026…) + grade Cirurgias BLUE | Ver quem tem revisão em cada mês; status 03m/06m/1a; **＋ nova cirurgia** |
 | **lembretes** | Anotações com prioridade, data/hora e repetição (estilo app Lembretes do Mac) | Tarefas pessoais da concierge |
 | **acompanhamentos** | Templates de prazos (Botox 15/90/180d, Cirurgia 90/180/365…) | Ajustar regras uma vez |
 
 O alerta do topo (**tarefas críticas**) mostra só o que é urgente de verdade: pacientes do recall para contatar hoje e cirurgias próximas. Revisões vencidas **não** aparecem lá — veja-as na régua por mês ou no filtro "revisões vencidas".
 
-**Suporte:** botão verde **suporte** no topo (ou "💬 suporte whatsapp" no rodapé) abre conversa direta no WhatsApp do suporte.
+**Suporte:** botão verde **suporte** no topo (ou "💬 suporte whatsapp" no rodapé) abre o assistente com Gemini — pergunte como usar o app; se precisar, fale com o Rafael no WhatsApp.
+
+**Sino (🔔):** no topo, mostra lembretes do dia e pacientes do recall para hoje — concluir ou adiar sem sair da tela.
+
+**Gemini (grátis):** em **conectar planilhas**, cole a chave do [Google AI Studio](https://aistudio.google.com/apikey) — habilita resumos na ficha, relatório de gestão, análise do recall e assistente de suporte.
 
 ### Alternar Recall ↔ Cirurgias sem sair do app
 
@@ -98,6 +102,13 @@ Só para emergência / conferência. O link oficial é:
 
 Não precisa abrir o Google.
 
+### Cadastrar cirurgia nova (sem planilha)
+
+1. **cirurgias & revisões** → **＋ nova cirurgia**
+2. Preencha: paciente, procedimento, data, hospital (opcional), template de revisão
+3. Com WhatsApp marcado, cria também linha no recall (para botão verde na lista)
+4. **salvar cirurgia** → pré-op ou pós-op aparece na hora; revisões seguem o template escolhido
+
 ---
 
 ## 6. Pré-op — Protocolo Interno de Exames
@@ -141,18 +152,19 @@ O checklist **não é mais uma lista genérica**. Ele aplica o protocolo do PDF 
 - Status **Pendente / Marcada / Realizada / Sem resposta** espelha as colunas da planilha.
 - Em **acompanhamentos**, Helen pode criar Botox (15/90/180), Lipedema, etc.
 - Na ficha da paciente: override de prazos só para aquela paciente.
-- **Revisões por mês:** régua de meses no topo do bloco cirurgias — toque num mês para ver só as pacientes com revisão naquele mês; toque de novo para limpar.
+- **Revisões por mês:** régua de meses no topo do bloco cirurgias — abas **2025 / 2026** (e outros anos da planilha); toque num mês para filtrar; alterne **ordem planilha / data** ao lado.
 
 ---
 
 ## 8.1 Lembretes (estilo app Lembretes do Mac)
 
-1. Escreva no campo **＋ novo lembrete** e tecle **Enter** — criou.
-2. Toque no lembrete para abrir os detalhes: **prioridade** (nenhuma / ! / !! / !!!), **lembrar em** (data + hora) e **repetir** (todos os dias → todo ano).
-3. Concluir um lembrete com repetição **remarca sozinho** para a próxima data (igual ao Mac).
-4. **Notificações do Mac:** clique em **🔔 ativar notificações do Mac** uma vez — com o app aberto, os lembretes da hora aparecem como notificação do sistema.
-5. **Mandar para o app Lembretes do Mac:** botão **⤓** no lembrete (ou **⤓ exportar p/ app Lembretes** para todos) baixa um arquivo `.ics` — abra o arquivo baixado e ele entra no app Lembretes com prioridade e repetição.
-6. Concluídos ficam guardados em **concluídos (n)**.
+1. Escreva no campo **＋ novo lembrete** em linguagem natural — ex.: `ligar pra Ana amanhã 14h !!` — e tecle **Enter** (a dica abaixo mostra o que o app entendeu).
+2. Toque no **⊕** ou no lembrete para abrir os detalhes: **prioridade**, **lembrar em** (atalhos: hoje, amanhã, +7d) e **repetir**.
+3. Na **ficha** da paciente: **⏰ criar lembrete** preenche o nome automaticamente.
+4. Concluir um lembrete com repetição **remarca sozinho** para a próxima data (igual ao Mac).
+5. **Notificações do Mac:** clique em **🔔 ativar notificações do Mac** uma vez — ou use o **sino** no topo para ver o que vence hoje.
+6. **Mandar para o app Lembretes do Mac:** botão **⤓** no lembrete (ou **⤓ exportar p/ app Lembretes** para todos) baixa um arquivo `.ics` — abra o arquivo baixado e ele entra no app Lembretes com prioridade e repetição.
+7. Concluídos ficam guardados em **concluídos (n)** · **limpar** remove os feitos.
 
 Os lembretes ficam salvos no Mac (não vão para a planilha).
 
