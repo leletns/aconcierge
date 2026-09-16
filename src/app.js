@@ -45,6 +45,7 @@ import {
 } from './services/reminders.js';
 import { SummaryService, pacienteSnapshot } from './services/summaryService.js';
 import { exportToXlsx } from './services/exportService.js';
+import { parseCirurgiasXlsx, resumoImportacao } from './services/importService.js';
 import { buildLinkInstalacao } from './services/storage.js';
 import { showToast, showLoadingToast } from './components/Toast.js';
 import { renderSyncIndicator } from './components/SummaryModal.js';
@@ -67,6 +68,7 @@ let anoCirurgias = ''; // '' = todos os anos com cirurgia na planilha; ou '2026'
 let conversaSuporte = [];
 let ultimaNovaRecallKey = ''; // destaque da paciente recém-registrada
 let ultimaNovaCirurgiaKey = ''; // destaque da cirurgia recém-cadastrada
+let importCirurgiasPendente = null;
 let lembreteAtual = null;
 let feitosVisiveis = false;
 const detalhesAbertos = { recall: false, cirurgias: false };
@@ -564,6 +566,93 @@ function renderCirurgias() {
   renderFiltrosAnoCirurgias();
   gridCirurgias.busca = buscaCirurgias;
   gridCirurgias.render();
+}
+
+/* ---------- IMPORTAR PLANILHA CIRURGIAS (.xlsx / OneDrive) ---------- */
+
+function abrirImportarCirurgias() {
+  importCirurgiasPendente = null;
+  $('#imp-cir-preview').hidden = true;
+  $('#imp-cir-preview').textContent = '';
+  $('#btn-imp-cir-confirmar').disabled = true;
+  $('#imp-cir-arquivo').value = '';
+  abrir('veu-import-cirurgias');
+}
+
+function previewImportCirurgias(info) {
+  importCirurgiasPendente = info;
+  const el = $('#imp-cir-preview');
+  el.hidden = false;
+  el.innerHTML = `<strong>${esc(resumoImportacao(info))}</strong>
+    ${info.amostra.map((s) => `<div>${esc(s)}</div>`).join('')}
+    ${info.amostra.length < info.total ? `<div class="celula-sub">… e mais ${info.total - info.amostra.length} linhas</div>` : ''}`;
+  $('#btn-imp-cir-confirmar').disabled = false;
+}
+
+async function processarArquivoCirurgias(file) {
+  if (!file) return;
+  const ext = (file.name || '').toLowerCase();
+  if (!/\.(xlsx|xls|csv)$/.test(ext)) {
+    showToast('use um arquivo .xlsx (exportado do OneDrive ou Excel)');
+    return;
+  }
+  try {
+    const buffer = await file.arrayBuffer();
+    const info = parseCirurgiasXlsx(buffer);
+    previewImportCirurgias(info);
+  } catch (e) {
+    importCirurgiasPendente = null;
+    $('#imp-cir-preview').hidden = true;
+    $('#btn-imp-cir-confirmar').disabled = true;
+    showToast(e.message || 'não foi possível ler a planilha');
+  }
+}
+
+function confirmarImportCirurgias() {
+  if (!importCirurgiasPendente?.linhas?.length) return;
+  store.importarCirurgias(importCirurgiasPendente.linhas);
+  anoCirurgias = '';
+  buscaCirurgias = '';
+  const buscaEl = $('#busca-cirurgias');
+  if (buscaEl) buscaEl.value = '';
+  renderCirurgias();
+  fechar('veu-import-cirurgias');
+  const anos = importCirurgiasPendente.anos.join(', ') || '—';
+  showToast(
+    syncService.configured
+      ? `${importCirurgiasPendente.total} cirurgias importadas (${anos}) — edite na grade; sync envia alterações ao Google`
+      : `${importCirurgiasPendente.total} cirurgias importadas (${anos}) — planilha completa no app`,
+  );
+  importCirurgiasPendente = null;
+}
+
+function bindImportCirurgias() {
+  const zona = $('#imp-cir-zona');
+  const input = $('#imp-cir-arquivo');
+  if (!zona || !input) return;
+
+  zona.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => processarArquivoCirurgias(input.files?.[0]));
+
+  ['dragenter', 'dragover'].forEach((ev) =>
+    zona.addEventListener(ev, (e) => {
+      e.preventDefault();
+      zona.classList.add('arrastando');
+    }),
+  );
+  ['dragleave', 'drop'].forEach((ev) =>
+    zona.addEventListener(ev, (e) => {
+      e.preventDefault();
+      zona.classList.remove('arrastando');
+    }),
+  );
+  zona.addEventListener('drop', (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file) processarArquivoCirurgias(file);
+  });
+
+  $('#btn-importar-cirurgias')?.addEventListener('click', abrirImportarCirurgias);
+  $('#btn-imp-cir-confirmar')?.addEventListener('click', confirmarImportCirurgias);
 }
 
 /* ---------- LEMBRETES (fiel ao app Lembretes do Mac/iOS) ---------- */
@@ -2056,6 +2145,7 @@ function initApp() {
     itens.forEach((el, i) => el.classList.toggle('marcado', i === buscaIndice));
   });
 
+  bindImportCirurgias();
   bindResumoModal();
   bindConfigModal();
   atualizarLinksPlanilhas();

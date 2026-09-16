@@ -19,7 +19,7 @@ Centraliza **Recall** + **Cirurgias** + **retornos pós-op** + **checklist pré-
 | Tela | Para que serve | Quando usar |
 |------|----------------|-------------|
 | **recall** | Lista + grade editável = planilha GESTÃO DE RECALL | Contatar / atualizar status / próximo contato |
-| **cirurgias & revisões** | Espelho da planilha Cirurgias — edite direto na grade | Filtrar por ano no topo · buscar paciente · **＋ nova cirurgia** |
+| **cirurgias & revisões** | Espelho da planilha Cirurgias — edite direto na grade | **⤒ importar planilha** (.xlsx do OneDrive) · filtro por ano · **＋ nova cirurgia** |
 | **lembretes** | Anotações com prioridade, data/hora e repetição (estilo app Lembretes do Mac) | Tarefas pessoais da concierge |
 | **acompanhamentos** | Templates de prazos (Botox 15/90/180d, Cirurgia 90/180/365…) | Ajustar regras uma vez |
 
@@ -108,6 +108,17 @@ Não precisa abrir o Google.
 2. Preencha: paciente, procedimento, data, hospital (opcional), template de revisão
 3. Com WhatsApp marcado, cria também linha no recall (para botão verde na lista)
 4. **salvar cirurgia** → pré-op ou pós-op aparece na hora; revisões seguem o template escolhido
+
+### Importar do OneDrive / Excel (planilha real da Helen)
+
+A planilha oficial pode estar no **OneDrive** — o app sincroniza com o **Google Sheets**, mas você pode carregar o arquivo Excel direto:
+
+1. No OneDrive: abra a planilha → **Arquivo → Salvar como → Baixar uma cópia** (`.xlsx`)
+2. No app: **cirurgias & revisões** → **⤒ importar planilha**
+3. Selecione o `.xlsx` → confira a prévia (anos 2025, 2026…) → **substituir cirurgias no app**
+4. Filtro **todas** mostra a planilha inteira; use **2025** / **2026** para filtrar
+
+> Se usar sync com Google, edite na grade e o app envia as alterações — ou copie a planilha OneDrive para o Google Cirurgias BLUE para manter os dois iguais.
 
 ---
 

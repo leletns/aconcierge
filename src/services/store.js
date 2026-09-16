@@ -152,6 +152,13 @@ export class Store {
     return linha;
   }
 
+  /** substitui cirurgias pelo espelho importado (.xlsx / OneDrive) */
+  importarCirurgias(linhas) {
+    this.dados.cirurgias = linhas.map((l) => novaLinhaCirurgia(l));
+    this._persist();
+    this.onChange();
+  }
+
   /* ---------- espelho remoto ---------- */
 
   /**
