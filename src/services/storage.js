@@ -54,6 +54,7 @@ export function buildLinkInstalacao(cfg) {
   if (!cfg.webAppUrl || !cfg.apiSecret) return null;
   const payload = { u: cfg.webAppUrl, s: cfg.apiSecret };
   if (cfg.geminiApiKey) payload.g = cfg.geminiApiKey;
+  if (cfg.geminiModel) payload.m = cfg.geminiModel;
   if (cfg.recallSheetUrl) payload.r = cfg.recallSheetUrl;
   if (cfg.cirurgiasSheetUrl) payload.c = cfg.cirurgiasSheetUrl;
   const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
@@ -74,6 +75,7 @@ export function loadConfig() {
   cfg.webAppUrl = cfg.webAppUrl || env.VITE_SHEETS_WEBAPP_URL || '';
   cfg.apiSecret = cfg.apiSecret || env.VITE_SHEETS_API_SECRET || '';
   cfg.geminiApiKey = cfg.geminiApiKey || env.VITE_GEMINI_API_KEY || '';
+  cfg.geminiModel = cfg.geminiModel || env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest';
   cfg.recallSheetUrl =
     cfg.recallSheetUrl || env.VITE_SPREADSHEET_URL_RECALL || DEFAULT_RECALL_SHEET_URL;
   cfg.cirurgiasSheetUrl =
@@ -93,6 +95,7 @@ export function loadConfig() {
     if (magico.u) cfg.webAppUrl = magico.u;
     if (magico.s) cfg.apiSecret = magico.s;
     if (magico.g) cfg.geminiApiKey = magico.g;
+    if (magico.m) cfg.geminiModel = magico.m;
     if (magico.r) cfg.recallSheetUrl = magico.r;
     if (magico.c) cfg.cirurgiasSheetUrl = magico.c;
     saveConfig(cfg);

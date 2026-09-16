@@ -14,16 +14,20 @@ import { normalizeNome } from '../utils/matching.js';
 
 const WA_SVG = `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .611.611l4.458-1.495A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.372l-.357-.212-3.028 1.015 1.015-3.028-.212-.357A9.818 9.818 0 1 1 12 21.818z"/></svg>`;
 
-const SELO_STATUS = {
-  Pendente: 'selo-ambar',
-  Agendado: 'selo-verde',
-  'Não agendou': 'selo-neutro',
-  'Sem Resposta': 'selo-coral',
-  'Em Acompanhamento': 'selo-azul',
-  'Sem interesse': 'selo-neutro',
-  Realizada: 'selo-verde',
-  Marcada: 'selo-azul',
-  'Sem resposta': 'selo-coral',
+/**
+ * Mesmas cores da formatação condicional das planilhas (apps-script/Code.gs):
+ * a célula inteira é pintada, como no Google Sheets.
+ */
+const COR_STATUS = {
+  Agendado: 'cel-verde',
+  Pendente: 'cel-ambar',
+  'Sem Resposta': 'cel-coral',
+  'Em Acompanhamento': 'cel-azul',
+  'Não agendou': 'cel-neutro',
+  'Sem interesse': 'cel-neutro',
+  Realizada: 'cel-verde',
+  Marcada: 'cel-azul',
+  'Sem resposta': 'cel-coral',
 };
 
 export class SpreadsheetGrid {
@@ -165,6 +169,7 @@ export class SpreadsheetGrid {
   tdHtml(r, c) {
     const raw = String(r[c.field] ?? '');
     let conteudo;
+    let extraClasse = '';
 
     if (c.type === 'phone') {
       const p = parsePhone(raw);
@@ -175,10 +180,8 @@ export class SpreadsheetGrid {
         <span class="celula-texto">${esc(p.valid ? formatPhoneDisplay(raw) : raw) || '<i class="celula-vazia">—</i>'}</span>
       </div>`;
     } else if (c.type === 'select') {
-      const selo = SELO_STATUS[raw] || 'selo-neutro';
-      conteudo = raw
-        ? `<span class="selo ${selo}">${esc(raw)}</span>`
-        : '<i class="celula-vazia">—</i>';
+      extraClasse = ` celula-status ${COR_STATUS[raw] || ''}`;
+      conteudo = raw ? `<span class="celula-texto">${esc(raw)}</span>` : '<i class="celula-vazia">—</i>';
     } else if (c.type === 'datelivre' || c.type === 'dataPt') {
       const iso = parseDataPt(raw);
       const dd = iso ? difDias(iso) : null;
@@ -199,7 +202,7 @@ export class SpreadsheetGrid {
         : '<i class="celula-vazia">—</i>';
     }
 
-    return `<td class="celula" data-field="${c.field}" title="${esc(raw)}">${conteudo}</td>`;
+    return `<td class="celula${extraClasse}" data-field="${c.field}" title="${esc(raw)}">${conteudo}</td>`;
   }
 
   bind() {

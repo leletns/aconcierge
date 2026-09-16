@@ -34,7 +34,15 @@ import { patientKey } from './utils/matching.js';
 import { estadoMarco, proximoMarco, templateParaCirurgia } from './utils/templates.js';
 import { Store } from './services/store.js';
 import { SyncService } from './services/syncService.js';
-import { RemindersStore, prioridadeDe, repeticaoDe, baixarIcs } from './services/reminders.js';
+import { GeminiApi, MODELOS_GEMINI } from './services/geminiApi.js';
+import { PAPEL_CONCIERGE } from './services/summaryService.js';
+import {
+  RemindersStore,
+  prioridadeDe,
+  repeticaoDe,
+  baixarIcs,
+  interpretarLembrete,
+} from './services/reminders.js';
 import { SummaryService, pacienteSnapshot } from './services/summaryService.js';
 import { exportToXlsx } from './services/exportService.js';
 import { buildLinkInstalacao } from './services/storage.js';
@@ -57,7 +65,11 @@ let filtroCirurgias = 'todas';
 let buscaRecall = '';
 let buscaCirurgias = '';
 let mesRevisao = ''; // 'yyyy-mm' selecionado na régua "revisões por mês"
+let anoRevisao = isoHoje().slice(0, 4);
+let ordemCirurgias = 'planilha'; // 'planilha' (linha do Sheets) | 'data'
+let conversaSuporte = [];
 let ultimaNovaRecallKey = ''; // destaque da paciente recém-registrada
+let ultimaNovaCirurgiaKey = ''; // destaque da cirurgia recém-cadastrada
 let lembreteAtual = null;
 let feitosVisiveis = false;
 const detalhesAbertos = { recall: false, cirurgias: false };
@@ -74,7 +86,11 @@ const reminders = new RemindersStore({
   },
 });
 
-const summaryService = new SummaryService({ geminiApiKey: store.config.geminiApiKey });
+const gemini = new GeminiApi({
+  apiKey: store.config.geminiApiKey,
+  modelo: store.config.geminiModel,
+});
+const summaryService = new SummaryService({ gemini });
 summaryService.setSheetsApi(syncService.api);
 syncService.onStatus((s) => renderSyncIndicator(s));
 
@@ -98,7 +114,7 @@ const gridCirurgias = new SpreadsheetGrid({
   statusField: 'm3m',
   getRows: () => store.cirurgias,
   onEdit: (key, field, value) => store.editarCelula('cirurgias', key, field, value),
-  onAddRow: () => store.adicionarLinha('cirurgias'),
+  onAddRow: () => abrirNovaCirurgia(),
   onOpenFicha: (linha) => abrirFichaDaLinha(linha, 'cirurgias'),
   headerLabel: headerLabelCirurgias,
 });
@@ -227,8 +243,13 @@ function atualizarNavBadges() {
     el.hidden = !n;
   };
   badge('#badge-recall', store.recallsVencidos().length);
-  badge('#badge-cirurgias', (revisoesPorMes().get(isoHoje().slice(0, 7)) || []).length);
+  // no badge só o que ainda precisa de ação neste mês (revisão já realizada não conta)
+  badge(
+    '#badge-cirurgias',
+    (revisoesPorMes().get(isoHoje().slice(0, 7)) || []).filter(({ px }) => px.status !== 'Realizada').length,
+  );
   badge('#badge-lembretes', reminders.vencidos().length);
+  atualizarSino();
 }
 
 function ajustarBarraFixa() {
@@ -452,42 +473,93 @@ function bindLinhasRecall(el) {
 
 /* ---------- BLOCO CIRURGIAS & REVISÕES (linhas) ---------- */
 
-/** revisões (próximo marco com data) agrupadas por mês 'yyyy-mm' */
+/**
+ * Revisões por mês ('yyyy-mm'), de TODOS os anos da planilha.
+ * Conta cada marco com data (não só o próximo), para que uma paciente de 2025
+ * com 03m/06m/1a apareça em cada um dos meses correspondentes.
+ */
 function revisoesPorMes() {
   const mapa = new Map();
   for (const c of store.cirurgiasPassadas()) {
     if (!String(c.paciente || '').trim()) continue;
-    const px = proximoMarco(store.marcosDe(c));
-    if (!px || !px.dataISO) continue;
-    const chave = px.dataISO.slice(0, 7);
-    if (!mapa.has(chave)) mapa.set(chave, []);
-    mapa.get(chave).push({ c, px });
+    for (const m of store.marcosDe(c)) {
+      if (!m.dataISO) continue;
+      const chave = m.dataISO.slice(0, 7);
+      if (!mapa.has(chave)) mapa.set(chave, []);
+      mapa.get(chave).push({ c, px: m });
+    }
   }
   return mapa;
+}
+
+/** anos presentes na planilha (cirurgias + revisões) + o ano corrente, em ordem */
+function anosDisponiveis() {
+  const anos = new Set([isoHoje().slice(0, 4)]);
+  for (const c of store.cirurgias) {
+    const iso = parseDataPt(c.data);
+    if (iso) anos.add(iso.slice(0, 4));
+  }
+  for (const chave of revisoesPorMes().keys()) anos.add(chave.slice(0, 4));
+  return [...anos].sort();
 }
 
 function renderMesesCirurgias() {
   const el = $('#meses-cirurgias');
   if (!el) return;
   const mapa = revisoesPorMes();
-  const base = paraData(isoHoje().slice(0, 7) + '-01');
+  const anos = anosDisponiveis();
+  if (!anos.includes(anoRevisao)) anoRevisao = anos.includes(isoHoje().slice(0, 4)) ? isoHoje().slice(0, 4) : anos[anos.length - 1];
+
+  const porAno = (ano) =>
+    [...mapa.entries()].reduce((n, [k, v]) => (k.startsWith(ano) ? n + v.length : n), 0);
+
+  const abasAno = anos
+    .map(
+      (a) =>
+        `<button type="button" class="ano-aba ${a === anoRevisao ? 'ativo' : ''}" data-ano="${a}">${a} <span class="n">${porAno(a)}</span></button>`,
+    )
+    .join('');
+
   const pilulas = [];
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
-    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  for (let m = 0; m < 12; m++) {
+    const chave = `${anoRevisao}-${String(m + 1).padStart(2, '0')}`;
     const n = (mapa.get(chave) || []).length;
-    const rotulo =
-      d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') +
-      ' ' +
-      String(d.getFullYear()).slice(2);
+    const rotulo = new Date(Number(anoRevisao), m, 1)
+      .toLocaleDateString('pt-BR', { month: 'short' })
+      .replace('.', '');
     pilulas.push(
       `<button type="button" class="mes-pilula ${mesRevisao === chave ? 'ativo' : ''} ${n ? '' : 'vazio'}" data-mes="${chave}">${rotulo} <span class="n">${n}</span></button>`,
     );
   }
-  el.innerHTML = `<div class="meses-rotulo">revisões por mês — toque para filtrar</div><div class="meses">${pilulas.join('')}</div>`;
+
+  el.innerHTML = `
+    <div class="meses-barra">
+      <div class="meses-rotulo">revisões por mês — toque para filtrar</div>
+      <div class="anos">${abasAno}</div>
+      <div class="ordem-toggle" title="a ordem 'planilha' é exatamente a das linhas do Google Sheets">
+        <span>ordem</span>
+        <button type="button" class="${ordemCirurgias === 'planilha' ? 'ativo' : ''}" data-ordem="planilha">planilha</button>
+        <button type="button" class="${ordemCirurgias === 'data' ? 'ativo' : ''}" data-ordem="data">data</button>
+      </div>
+    </div>
+    <div class="meses">${pilulas.join('')}</div>`;
+
+  el.querySelectorAll('[data-ano]').forEach((b) =>
+    b.addEventListener('click', () => {
+      anoRevisao = b.dataset.ano;
+      if (mesRevisao && !mesRevisao.startsWith(anoRevisao)) mesRevisao = '';
+      renderLinhasCirurgias();
+    }),
+  );
   el.querySelectorAll('[data-mes]').forEach((b) =>
     b.addEventListener('click', () => {
       mesRevisao = mesRevisao === b.dataset.mes ? '' : b.dataset.mes;
+      renderLinhasCirurgias();
+    }),
+  );
+  el.querySelectorAll('[data-ordem]').forEach((b) =>
+    b.addEventListener('click', () => {
+      ordemCirurgias = b.dataset.ordem;
       renderLinhasCirurgias();
     }),
   );
@@ -528,7 +600,17 @@ function renderLinhasCirurgias() {
     });
 
   if (mesRevisao) {
-    itens = itens.filter(({ px }) => px && px.dataISO && px.dataISO.startsWith(mesRevisao));
+    // mês selecionado: qualquer marco naquele mês (não só o próximo) + cirurgias do mês
+    itens = itens
+      .filter(
+        ({ marcos, iso }) =>
+          marcos.some((m) => m.dataISO && m.dataISO.startsWith(mesRevisao)) ||
+          (iso && iso.startsWith(mesRevisao)),
+      )
+      .map((it) => {
+        const doMes = it.marcos.find((m) => m.dataISO && m.dataISO.startsWith(mesRevisao));
+        return doMes ? { ...it, px: doMes } : it;
+      });
   } else if (filtroCirurgias === 'vencidas') itens = itens.filter(({ px }) => px && px.dataISO && difDias(px.dataISO) <= 0);
   else if (filtroCirurgias === 'mes') itens = itens.filter(({ px, futura, iso }) => (px && px.dataISO && px.dataISO <= fim) || (futura && iso <= fim));
   else if (filtroCirurgias === 'preop') itens = itens.filter(({ futura }) => futura);
@@ -539,9 +621,15 @@ function renderLinhasCirurgias() {
   }
   itens = itens.filter(({ c }) => contemBusca(c, ['paciente', 'cirurgia', 'hospital'], buscaCirurgias));
 
+  // "planilha" = mesma sequência do ver detalhes (linha do Sheets); "data" = pela data da cirurgia
   itens.sort((a, b) => {
-    const da = a.futura ? a.iso : a.px?.dataISO || '9999';
-    const db = b.futura ? b.iso : b.px?.dataISO || '9999';
+    if (ordemCirurgias === 'planilha') {
+      const ra = a.c.row ?? Number.MAX_SAFE_INTEGER;
+      const rb = b.c.row ?? Number.MAX_SAFE_INTEGER;
+      if (ra !== rb) return ra - rb;
+    }
+    const da = a.iso || '9999-99-99';
+    const db = b.iso || '9999-99-99';
     return da < db ? -1 : da > db ? 1 : 0;
   });
 
@@ -570,7 +658,7 @@ function renderLinhasCirurgias() {
             dataHtml = `<span class="linha-data">—</span>`;
           }
 
-          return `<div class="linha" data-key="${c.key}">
+          return `<div class="linha ${c.key === ultimaNovaCirurgiaKey ? 'linha-nova' : ''}" data-key="${c.key}">
         <div class="linha-nome" data-ficha-cir="${c.key}" title="abrir ficha">
           ${esc(c.paciente)}
           <span class="linha-sub" title="${esc(c.cirurgia || '')}">${esc((c.cirurgia || '').slice(0, 60))}${(c.cirurgia || '').length > 60 ? '…' : ''}</span>
@@ -750,16 +838,44 @@ function bindLembretes(root) {
   );
 }
 
+/** atalhos de data no editor — 1 toque em vez de abrir o calendário */
+function renderAtalhosLembrete() {
+  const el = $('#lem-atalhos');
+  if (!el) return;
+  const opcoes = [
+    ['hoje', isoHoje()],
+    ['amanhã', somarDias(isoHoje(), 1)],
+    ['em 3 dias', somarDias(isoHoje(), 3)],
+    ['próxima semana', somarDias(isoHoje(), 7)],
+    ['em 1 mês', somarDias(isoHoje(), 30)],
+  ];
+  const atual = $('#lem-data')?.value || '';
+  el.innerHTML =
+    opcoes
+      .map(
+        ([rotulo, iso]) =>
+          `<button type="button" class="lem-atalho ${atual === iso ? 'ativo' : ''}" data-lem-data="${iso}">${rotulo}</button>`,
+      )
+      .join('') + `<button type="button" class="lem-atalho ${atual ? '' : 'ativo'}" data-lem-data="">sem data</button>`;
+  el.querySelectorAll('[data-lem-data]').forEach((b) =>
+    b.addEventListener('click', () => {
+      $('#lem-data').value = b.dataset.lemData;
+      renderAtalhosLembrete();
+    }),
+  );
+}
+
 /** abre a folha de detalhes — sem id = modo "novo lembrete" (cria ao salvar) */
-function abrirLembrete(id, tituloInicial = '') {
+function abrirLembrete(id, base = {}) {
   const l = id ? reminders.get(id) : null;
   lembreteAtual = l ? id : null;
-  $('#lem-titulo').value = l ? l.titulo : tituloInicial;
-  $('#lem-notas').value = l?.notas || '';
-  $('#lem-prio').value = l?.prioridade || 'nenhuma';
-  $('#lem-repetir').value = l?.repetir || 'nunca';
-  $('#lem-data').value = l?.dataISO || '';
-  $('#lem-hora').value = l?.hora || '';
+  $('#lem-titulo').value = l ? l.titulo : base.titulo || '';
+  $('#lem-notas').value = l?.notas ?? base.notas ?? '';
+  $('#lem-prio').value = l?.prioridade || base.prioridade || 'nenhuma';
+  $('#lem-repetir').value = l?.repetir || base.repetir || 'nunca';
+  $('#lem-data').value = l?.dataISO ?? base.dataISO ?? '';
+  $('#lem-hora').value = l?.hora ?? base.hora ?? '';
+  renderAtalhosLembrete();
   const novo = !l;
   const h3 = $('#veu-lembrete h3');
   if (h3) h3.innerHTML = `${novo ? 'novo lembrete' : 'lembrete'}<span class="ponto">.</span>`;
@@ -812,6 +928,239 @@ function atualizarBotaoNotif() {
   const btn = $('#btn-lem-notif');
   if (!btn) return;
   btn.hidden = !('Notification' in window) || Notification.permission !== 'default';
+}
+
+/* ---------- CENTRAL DE NOTIFICAÇÕES (sino) ---------- */
+
+/** lembretes que pedem atenção: vencidos, de hoje e os próximos 2 dias */
+function lembretesDoSino() {
+  const limite = somarDias(isoHoje(), 2);
+  return reminders.lista
+    .filter((l) => !l.feito && l.dataISO && l.dataISO <= limite)
+    .sort((a, b) => (a.dataISO < b.dataISO ? -1 : a.dataISO > b.dataISO ? 1 : (a.hora || '') < (b.hora || '') ? -1 : 1));
+}
+
+function atualizarSino() {
+  const badge = $('#sino-badge');
+  if (!badge) return;
+  const n = reminders.vencidos().length;
+  badge.textContent = n > 9 ? '9+' : String(n);
+  badge.hidden = !n;
+  $('#btn-sino')?.classList.toggle('tocando', n > 0);
+  if (!$('#painel-sino')?.hidden) renderSino();
+}
+
+function renderSino() {
+  const lista = $('#sino-lista');
+  if (!lista) return;
+  const perm = $('#sino-permissao');
+  if (perm) perm.hidden = !('Notification' in window) || Notification.permission !== 'default';
+
+  const itens = lembretesDoSino();
+  lista.innerHTML = itens.length
+    ? itens
+        .map((l) => {
+          const dd = difDias(l.dataISO);
+          const quando = dd < 0 ? `atrasado ${Math.abs(dd)}d` : dd === 0 ? 'hoje' : dd === 1 ? 'amanhã' : fmt(l.dataISO);
+          const prio = prioridadeDe(l.prioridade);
+          return `<div class="sino-item ${dd <= 0 ? 'urgente' : ''}">
+            <button type="button" class="lem-check" data-sino-check="${l.id}" title="concluir"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5.4 4.3 8.7 11 1.3"/></svg></button>
+            <div class="sino-corpo" data-sino-abrir="${l.id}">
+              <div class="sino-titulo">${prio.sinais ? `<span class="lem-prio">${prio.sinais}</span>` : ''}${esc(l.titulo)}</div>
+              <div class="sino-meta">${esc(quando)}${l.hora ? ' · ' + esc(l.hora) : ''}</div>
+            </div>
+            <button type="button" class="sino-adiar" data-sino-adiar="${l.id}" title="adiar para amanhã">adiar</button>
+          </div>`;
+        })
+        .join('')
+    : `<div class="sino-vazio">nada para agora — seus lembretes estão em dia ✓</div>`;
+
+  lista.querySelectorAll('[data-sino-check]').forEach((b) =>
+    b.addEventListener('click', () => {
+      reminders.alternarFeito(b.dataset.sinoCheck);
+      showToast('lembrete concluído ✓');
+    }),
+  );
+  lista.querySelectorAll('[data-sino-adiar]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const l = reminders.get(b.dataset.sinoAdiar);
+      if (!l) return;
+      reminders.atualizar(l.id, { dataISO: somarDias(l.dataISO || isoHoje(), 1) });
+      showToast('adiado para amanhã');
+    }),
+  );
+  lista.querySelectorAll('[data-sino-abrir]').forEach((c) =>
+    c.addEventListener('click', () => {
+      fecharSino();
+      abrirLembrete(c.dataset.sinoAbrir);
+    }),
+  );
+}
+
+function abrirSino() {
+  const p = $('#painel-sino');
+  if (!p) return;
+  p.hidden = false;
+  renderSino();
+}
+
+function fecharSino() {
+  const p = $('#painel-sino');
+  if (p) p.hidden = true;
+}
+
+/* ---------- ASSISTENTE / SUPORTE ---------- */
+
+const SUGESTOES_SUPORTE = [
+  'como faço para cadastrar uma paciente nova?',
+  'o que eu falo para quem não respondeu?',
+  'como marcar a revisão de 6 meses?',
+  'o que preciso fazer hoje?',
+];
+
+/** contexto curto da operação — deixa a resposta do Gemini específica, não genérica */
+function contextoOperacao() {
+  const g = resumoGestao();
+  const hojeRecall = store.recallsVencidos().slice(0, 12).map((r) => `${r.nome} (${r.status || 'sem status'})`);
+  const proximas = store
+    .cirurgiasFuturas()
+    .slice(0, 6)
+    .map(({ c, iso }) => `${c.paciente}: ${c.cirurgia || 'cirurgia'} em ${fmt(iso)}`);
+  const revMes = (revisoesPorMes().get(isoHoje().slice(0, 7)) || [])
+    .filter(({ px }) => px.status !== 'Realizada')
+    .slice(0, 10)
+    .map(({ c, px }) => `${c.paciente}: revisão ${px.label} em ${fmt(px.dataISO)} (${px.status})`);
+  const lembretes = lembretesDoSino().slice(0, 8).map((l) => `${l.titulo} (${l.dataISO})`);
+  return {
+    hoje: isoHoje(),
+    recallTotal: g.total,
+    recallPorStatus: g.porStatus,
+    pacientesParaContatarHoje: hojeRecall,
+    cirurgiasProximas: proximas,
+    revisoesDoMes: revMes,
+    lembretes,
+  };
+}
+
+const AJUDA_SISTEMA = `Como o sistema funciona (use para responder dúvidas de uso):
+- Barra do topo: botões recall, cirurgias & revisões e lembretes levam direto à seção.
+- Recall: lista espelhada da planilha GESTÃO DE RECALL. Editar status, próximo contato e observações salva sozinho no Google Sheets. Botão "registrar" abre a janela de registrar contato. "＋ nova paciente" cadastra na planilha.
+- Cirurgias & revisões: régua de anos e meses mostra quem tem revisão em cada mês; o seletor "ordem" alterna entre a ordem da planilha e a ordem por data. O status da revisão (Pendente/Marcada/Realizada/Sem resposta) salva nas colunas 03m/06m/1a.
+- Lembretes: escreva algo como "ligar pra Ana amanhã 14h !!" que o sistema entende data, hora e prioridade. O sino no topo mostra o que vence hoje, permite concluir e adiar.
+- Botão WhatsApp verde abre a conversa com a paciente com mensagem pronta.
+- "exportar XLSX" baixa backup; "resumo para gestão" gera o relatório do Dr. Rafael.
+- Suporte humano: Rafael no WhatsApp (botão nesta janela).`;
+
+function renderConversaSuporte() {
+  const box = $('#sup-conversa');
+  if (!box) return;
+  box.innerHTML = conversaSuporte
+    .map(
+      (m) =>
+        `<div class="sup-msg ${m.autor}">${m.carregando ? '<span class="spinner spinner-inline"></span> pensando…' : esc(m.texto).replace(/\n/g, '<br>')}</div>`,
+    )
+    .join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+async function perguntarSuporte(pergunta) {
+  const texto = String(pergunta || '').trim();
+  if (!texto) return;
+  conversaSuporte.push({ autor: 'helen', texto });
+  const pendente = { autor: 'bot', texto: '', carregando: true };
+  conversaSuporte.push(pendente);
+  renderConversaSuporte();
+  $('#sup-sugestoes').hidden = true;
+
+  if (!gemini.configured) {
+    pendente.carregando = false;
+    pendente.texto =
+      'Ainda não tenho a chave do Gemini configurada aqui.\n' +
+      'Peça ao Rafael para colar a chave em “conectar planilhas” (é grátis, em aistudio.google.com/apikey).\n' +
+      'Enquanto isso, é só chamar ele no WhatsApp pelo botão abaixo. 💙';
+    renderConversaSuporte();
+    return;
+  }
+
+  try {
+    const resposta = await gemini.gerar(
+      `Pergunta da Helen: ${texto}\n\n${AJUDA_SISTEMA}\n\nSituação de hoje (JSON):\n${JSON.stringify(contextoOperacao(), null, 2)}`,
+      {
+        sistema:
+          PAPEL_CONCIERGE +
+          ' Você também é o suporte do sistema blue. Central. Responda em no máximo 6 linhas, ' +
+          'com passo a passo quando for dúvida de uso. Se for algo que só o Rafael resolve ' +
+          '(erro técnico, planilha fora do ar, senha), diga para chamá-lo no botão do WhatsApp.',
+        temperatura: 0.3,
+        maxTokens: 700,
+      },
+    );
+    pendente.carregando = false;
+    pendente.texto = resposta;
+  } catch (e) {
+    pendente.carregando = false;
+    pendente.texto = `Não consegui responder agora (${e.message}).\nChame o Rafael no WhatsApp pelo botão abaixo. 💙`;
+  }
+  renderConversaSuporte();
+}
+
+function abrirSuporte() {
+  const sug = $('#sup-sugestoes');
+  if (sug) {
+    sug.hidden = conversaSuporte.length > 0;
+    sug.innerHTML = SUGESTOES_SUPORTE.map((s) => `<button type="button" class="sup-chip">${esc(s)}</button>`).join('');
+    sug.querySelectorAll('.sup-chip').forEach((b) =>
+      b.addEventListener('click', () => perguntarSuporte(b.textContent)),
+    );
+  }
+  renderConversaSuporte();
+  abrir('veu-suporte');
+  setTimeout(() => $('#sup-campo')?.focus(), 60);
+}
+
+/* ---------- ANÁLISE DO RECALL (Gemini) ---------- */
+
+async function analisarRecall() {
+  resumoAtual = null; // não é resumo de paciente — evita "inserir em observações" na linha errada
+  abrir('veu-resumo');
+  $('#resumo-sub').textContent = 'recall — o que fazer hoje';
+  $('#resumo-conteudo').innerHTML = '<div class="loading-state"><span class="spinner"></span> a assistente está lendo o recall…</div>';
+  resumoTexto = '';
+
+  if (!gemini.configured) {
+    $('#resumo-conteudo').innerHTML =
+      `<div class="vazio"><strong>Gemini ainda não conectado</strong>cole a chave grátis em “conectar planilhas” (aistudio.google.com/apikey) para a assistente analisar o recall</div>`;
+    return;
+  }
+
+  const recall = store.recall
+    .filter((r) => String(r.nome || '').trim())
+    .slice(0, 120)
+    .map((r) => ({
+      nome: r.nome,
+      status: r.status,
+      ultimaConsulta: r.ultimaConsulta,
+      dataContato: r.dataContato,
+      proximoContato: r.proximoContato,
+      motivoRecusa: r.motivoRecusa,
+      obs: (r.obs || '').slice(0, 220),
+    }));
+
+  try {
+    resumoTexto = await gemini.gerar(
+      'Analise a carteira de recall abaixo e responda em 4 blocos curtos:\n' +
+        '1) PRIORIDADE DE HOJE — até 6 pacientes para contatar agora e o motivo de cada uma;\n' +
+        '2) O QUE ESTÁ TRAVANDO — padrões nas observações (preço, viagem, indecisão, sem resposta);\n' +
+        '3) MENSAGEM SUGERIDA — um texto curto de WhatsApp para o grupo mais numeroso;\n' +
+        '4) ARRUMAR NA PLANILHA — linhas com dado faltando ou status estranho.\n' +
+        `Hoje é ${isoHoje()}.\n\nRecall (JSON):\n${JSON.stringify(recall, null, 2)}`,
+      { sistema: PAPEL_CONCIERGE, temperatura: 0.4, maxTokens: 1400 },
+    );
+    $('#resumo-sub').textContent = `recall · ${recall.length} pacientes · Gemini ${gemini.modeloEmUso.replace('gemini-', '')}`;
+    $('#resumo-conteudo').innerHTML = `<pre class="resumo-texto">${esc(resumoTexto)}</pre>`;
+  } catch (e) {
+    $('#resumo-conteudo').innerHTML = `<div class="vazio"><strong>não consegui analisar</strong>${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------- CARD DE GESTÃO blue. ---------- */
@@ -948,28 +1297,40 @@ function abrirGestao() {
   abrir('veu-gestao');
 
   // refinamento assíncrono via Gemini (quando conectado) — o card já está completo sem ele
-  if (syncService.api.configured) {
-    const alvo = $('#gestao-gemini');
+  const numeros = {
+    totalRecall: g.total,
+    porStatus: g.porStatus,
+    cirurgias: g.cirurgias,
+    preop: g.preop,
+    revisoes: { realizadas: g.revRealizadas, marcadas: g.revMarcadas, aAgendar: g.revVencidas },
+    motivos: Object.fromEntries(g.motivos),
+    gargalos: { semResposta: g.gargaloSemResposta, aguardando: g.gargaloAguardando },
+  };
+  const alvo = $('#gestao-gemini');
+  if (!alvo) return;
+
+  const mostrar = (texto) => {
+    const el = $('#gestao-gemini');
+    if (el) el.innerHTML = texto ? `✨ <b>Análise Gemini:</b> ${esc(texto)}` : '';
+  };
+
+  if (gemini.configured) {
+    alvo.innerHTML = '<span class="spinner spinner-inline"></span> análise Gemini…';
+    gemini
+      .gerar(
+        'Escreva 3 frases para o Dr. Rafael sobre a operação do recall: o que está bom, ' +
+          'o principal gargalo e a recomendação da semana. Sem saudação, direto ao ponto.\n\n' +
+          JSON.stringify(numeros, null, 2),
+        { sistema: PAPEL_CONCIERGE, temperatura: 0.45, maxTokens: 500 },
+      )
+      .then(mostrar)
+      .catch(() => mostrar(''));
+  } else if (syncService.api.configured) {
     alvo.innerHTML = '<span class="spinner spinner-inline"></span> análise Gemini…';
     syncService.api
-      .summarize({
-        _tipo: 'gestao',
-        totalRecall: g.total,
-        porStatus: g.porStatus,
-        cirurgias: g.cirurgias,
-        preop: g.preop,
-        revisoes: { realizadas: g.revRealizadas, marcadas: g.revMarcadas, aAgendar: g.revVencidas },
-        motivos: Object.fromEntries(g.motivos),
-        gargalos: { semResposta: g.gargaloSemResposta, aguardando: g.gargaloAguardando },
-      })
-      .then((r) => {
-        const el = $('#gestao-gemini');
-        if (el) el.innerHTML = `✨ <b>Análise Gemini:</b> ${esc(r.text)}`;
-      })
-      .catch(() => {
-        const el = $('#gestao-gemini');
-        if (el) el.innerHTML = '';
-      });
+      .summarize({ _tipo: 'gestao', ...numeros })
+      .then((r) => mostrar(r.text))
+      .catch(() => mostrar(''));
   }
 }
 
@@ -1098,6 +1459,7 @@ function abrirFicha(pKey) {
     </div>
     <div class="ficha-acoes">
       ${p.telefone ? `<button type="button" class="btn btn-wa" data-wa="${esc(buildWhatsAppLink(p.telefone, waMsgRecall(p.nome)))}">WhatsApp</button>` : ''}
+      <button type="button" class="btn btn-claro" id="btn-ficha-lembrete">⏰ criar lembrete</button>
       <button type="button" class="btn btn-gemini" id="btn-ficha-resumir">✨ Resumir com Gemini</button>
     </div>
     ${p.recallRows.length ? `<div class="ficha-secao"><h4>recall</h4>${recallHtml}</div>` : ''}
@@ -1131,6 +1493,14 @@ function abrirFicha(pKey) {
 
   $('#btn-ficha-fechar')?.addEventListener('click', () => fechar('veu-ficha'));
   $('#btn-ficha-resumir')?.addEventListener('click', () => gerarResumo(pKey));
+  $('#btn-ficha-lembrete')?.addEventListener('click', () => {
+    fechar('veu-ficha');
+    abrirLembrete(null, {
+      titulo: `Falar com ${primeiroNome(p.nome)}`,
+      notas: p.telefone ? formatPhoneDisplay(p.telefone) : '',
+      dataISO: somarDias(isoHoje(), 1),
+    });
+  });
   $('#conteudo-ficha').querySelectorAll('[data-contato]').forEach((b) =>
     b.addEventListener('click', () => {
       fechar('veu-ficha');
@@ -1266,6 +1636,92 @@ function salvarNovaRecall() {
   );
 }
 
+/* ---------- NOVA CIRURGIA (processo completo no app) ---------- */
+
+function abrirNovaCirurgia() {
+  $('#nc-nome').value = '';
+  $('#nc-fone').value = '';
+  $('#nc-data').value = isoHoje();
+  $('#nc-cirurgia').value = '';
+  $('#nc-hospital').value = '';
+  $('#nc-recall').checked = true;
+  const tplEl = $('#nc-template');
+  if (tplEl) {
+    const padrao = store.appConfig.templates.find((t) => t.padrao)?.id || '';
+    tplEl.innerHTML = store.appConfig.templates
+      .map((t) => `<option value="${t.id}" ${t.padrao ? 'selected' : ''}>${esc(t.nome)}${t.padrao ? ' (padrão)' : ''}</option>`)
+      .join('');
+    tplEl.value = padrao;
+  }
+  abrir('veu-nova-cirurgia');
+  setTimeout(() => $('#nc-nome')?.focus(), 60);
+}
+
+function salvarNovaCirurgia() {
+  const nome = $('#nc-nome').value.trim();
+  if (!nome) {
+    showToast('informe o nome da paciente');
+    $('#nc-nome')?.focus();
+    return;
+  }
+  const cirurgia = $('#nc-cirurgia').value.trim();
+  if (!cirurgia) {
+    showToast('informe o procedimento');
+    $('#nc-cirurgia')?.focus();
+    return;
+  }
+  const iso = $('#nc-data').value || isoHoje();
+  const fone = $('#nc-fone').value.trim();
+  const tplId = $('#nc-template')?.value || '';
+  const padrao = store.appConfig.templates.find((t) => t.padrao)?.id || '';
+  const criarRecall = $('#nc-recall')?.checked && fone;
+
+  filtroCirurgias = 'todas';
+  mesRevisao = '';
+  buscaCirurgias = '';
+  const buscaEl = $('#busca-cirurgias');
+  if (buscaEl) buscaEl.value = '';
+
+  const linha = store.adicionarLinha('cirurgias', {
+    paciente: nome,
+    cirurgia,
+    hospital: $('#nc-hospital').value.trim(),
+    data: fmtDataPlanilhaCirurgias(iso),
+  });
+
+  const pKey = patientKey(nome);
+  if (tplId && tplId !== padrao) store.atribuirTemplate(pKey, tplId);
+
+  if (criarRecall) {
+    store.adicionarLinha('recall', {
+      nome,
+      contato: fone,
+      status: 'Pendente',
+      dataContato: fmtDataPlanilhaRecall(isoHoje()),
+    });
+  }
+
+  ultimaNovaCirurgiaKey = linha.key;
+  anoRevisao = iso.slice(0, 4);
+  renderLinhasCirurgias();
+  fechar('veu-nova-cirurgia');
+  requestAnimationFrame(() => {
+    document
+      .querySelector(`#linhas-cirurgias .linha[data-key="${linha.key}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  setTimeout(() => {
+    if (ultimaNovaCirurgiaKey === linha.key) ultimaNovaCirurgiaKey = '';
+  }, 2600);
+
+  const futura = difDias(iso) >= 0;
+  showToast(
+    syncService.configured
+      ? `${nome} — ${futura ? 'pré-op' : 'pós-op'} salva · enviando para o Google Sheets…`
+      : `${nome} salva localmente — conecte as planilhas para sincronizar`,
+  );
+}
+
 /* ---------- REGISTRAR CONTATO ---------- */
 
 function abrirContato(recallKey) {
@@ -1370,6 +1826,28 @@ function bindConfigModal() {
   $('#cfg-secret').value = store.config.apiSecret || '';
   $('#cfg-url-recall').value = store.config.recallSheetUrl || '';
   $('#cfg-url-cirurgias').value = store.config.cirurgiasSheetUrl || '';
+  $('#cfg-gemini').value = store.config.geminiApiKey || '';
+  $('#cfg-gemini-modelo').innerHTML = MODELOS_GEMINI.map(
+    (m) => `<option value="${m.id}" ${store.config.geminiModel === m.id ? 'selected' : ''}>${esc(m.label)}</option>`,
+  ).join('');
+
+  $('#btn-testar-gemini')?.addEventListener('click', async () => {
+    const status = $('#cfg-gemini-status');
+    const teste = new GeminiApi({
+      apiKey: $('#cfg-gemini').value.trim(),
+      modelo: $('#cfg-gemini-modelo').value,
+    });
+    status.className = 'campo-hint';
+    status.textContent = 'testando…';
+    try {
+      const r = await teste.testar();
+      status.className = 'campo-ok';
+      status.textContent = `✓ chave válida — ${r.modelo || 'modelo disponível'}`;
+    } catch (e) {
+      status.className = 'campo-hint';
+      status.textContent = '✕ ' + e.message;
+    }
+  });
 
   $('#btn-link-magico')?.addEventListener('click', async () => {
     const cfg = {
@@ -1401,14 +1879,21 @@ function bindConfigModal() {
       apiSecret: $('#cfg-secret').value.trim(),
       recallSheetUrl: $('#cfg-url-recall').value.trim(),
       cirurgiasSheetUrl: $('#cfg-url-cirurgias').value.trim(),
+      geminiApiKey: $('#cfg-gemini').value.trim(),
+      geminiModel: $('#cfg-gemini-modelo').value,
     });
     store.persistConfig();
+    gemini.configurar({ apiKey: store.config.geminiApiKey, modelo: store.config.geminiModel });
     try {
       await syncService.configure(store.config);
       summaryService.setSheetsApi(syncService.api);
       atualizarLinksPlanilhas();
       fechar('veu-config');
-      showToast('planilhas conectadas — sync automático ativo');
+      showToast(
+        gemini.configured
+          ? 'planilhas conectadas · assistente Gemini ativa'
+          : 'planilhas conectadas — sync automático ativo',
+      );
     } catch (e) {
       showToast('erro: ' + e.message);
     } finally {
@@ -1505,25 +1990,86 @@ function initApp() {
   window.addEventListener('load', ajustarBarraFixa);
   initFonte();
 
-  // suporte → WhatsApp direto
+  // suporte: assistente responde na hora; o Rafael fica a um clique
   const waSuporte = buildWhatsAppLink(
     SUPORTE_WHATSAPP,
     'Olá! Aqui é a Helen, da blue. Preciso de ajuda com a central da concierge.',
   );
-  ['#btn-suporte', '#lnk-suporte'].forEach((sel) => {
-    const a = $(sel);
-    if (a) a.href = waSuporte;
+  const btnWaSup = $('#btn-sup-wa');
+  if (btnWaSup) btnWaSup.href = waSuporte;
+  const lnkSup = $('#lnk-suporte');
+  if (lnkSup) lnkSup.href = waSuporte;
+  $('#btn-suporte')?.addEventListener('click', abrirSuporte);
+  $('#btn-sup-fechar')?.addEventListener('click', () => fechar('veu-suporte'));
+  $('#btn-sup-enviar')?.addEventListener('click', () => {
+    const campo = $('#sup-campo');
+    perguntarSuporte(campo.value);
+    campo.value = '';
+  });
+  $('#sup-campo')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      perguntarSuporte(e.target.value);
+      e.target.value = '';
+    }
   });
 
-  // lembretes — ⊕ abre a fichinha; Enter cria e já abre os detalhes
+  // análise do recall com a assistente
+  $('#btn-analisar-recall')?.addEventListener('click', analisarRecall);
+
+  // sino de notificações
+  $('#btn-sino')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if ($('#painel-sino').hidden) abrirSino();
+    else fecharSino();
+  });
+  $('#btn-sino-fechar')?.addEventListener('click', fecharSino);
+  $('#btn-sino-ir')?.addEventListener('click', () => {
+    fecharSino();
+    document.getElementById('bloco-lembretes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('#btn-sino-permitir')?.addEventListener('click', async () => {
+    try {
+      const perm = await Notification.requestPermission();
+      showToast(perm === 'granted' ? 'avisos ativados — vou te chamar na hora do lembrete' : 'avisos não autorizados pelo navegador');
+    } catch (_) {}
+    atualizarBotaoNotif();
+    renderSino();
+  });
+  document.addEventListener('click', (e) => {
+    if (!$('#painel-sino')?.hidden && !e.target.closest('#painel-sino') && !e.target.closest('#btn-sino')) {
+      fecharSino();
+    }
+  });
+
+  // lembretes — ⊕ abre a fichinha; Enter já interpreta "amanhã 14h !!" e salva
   $('#lem-add-btn')?.addEventListener('click', () => abrirLembrete());
   $('#lem-novo')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.target.value.trim()) {
-      const l = reminders.adicionar({ titulo: e.target.value.trim() });
-      e.target.value = '';
+    if (e.key !== 'Enter' || !e.target.value.trim()) return;
+    const lido = interpretarLembrete(e.target.value);
+    e.target.value = '';
+    // com data/hora reconhecidas, salva direto; sem nada reconhecido, abre a ficha para completar
+    if (lido.dataISO || lido.hora || lido.prioridade !== 'nenhuma' || lido.repetir !== 'nunca') {
+      reminders.adicionar(lido);
       renderLembretes(); // o guard digitandoEm pula o render enquanto o input tem foco
-      abrirLembrete(l.id);
+      const quando = lido.dataISO ? `${difDias(lido.dataISO) === 0 ? 'hoje' : fmt(lido.dataISO)}${lido.hora ? ' às ' + lido.hora : ''}` : 'sem data';
+      showToast(`lembrete criado — ${quando}`);
+    } else {
+      renderLembretes();
+      abrirLembrete(null, { titulo: lido.titulo });
     }
+  });
+  $('#lem-novo')?.addEventListener('input', (e) => {
+    const dica = $('#lem-dica-parse');
+    if (!dica) return;
+    const lido = interpretarLembrete(e.target.value);
+    const partes = [];
+    if (lido.dataISO) partes.push(difDias(lido.dataISO) === 0 ? 'hoje' : fmt(lido.dataISO));
+    if (lido.hora) partes.push(lido.hora);
+    if (lido.prioridade !== 'nenhuma') partes.push(prioridadeDe(lido.prioridade).sinais);
+    if (lido.repetir !== 'nunca') partes.push('↻ ' + repeticaoDe(lido.repetir).label);
+    dica.textContent = partes.length ? `entendi: ${lido.titulo} · ${partes.join(' · ')}` : '';
+    dica.hidden = !partes.length;
   });
   $('#lem-toggle-feitos')?.addEventListener('click', () => {
     feitosVisiveis = !feitosVisiveis;
@@ -1626,6 +2172,8 @@ function initApp() {
   $('#btn-salvar-contato')?.addEventListener('click', salvarContato);
   $('#btn-nova-recall')?.addEventListener('click', abrirNovaRecall);
   $('#btn-salvar-nova-recall')?.addEventListener('click', salvarNovaRecall);
+  $('#btn-nova-cirurgia')?.addEventListener('click', abrirNovaCirurgia);
+  $('#btn-salvar-nova-cirurgia')?.addEventListener('click', salvarNovaCirurgia);
 
   document.querySelectorAll('.veu').forEach((v) =>
     v.addEventListener('mousedown', (e) => {
