@@ -92,29 +92,23 @@
     </div>
   </section>
 
-  <!-- ---------- bloco CIRURGIAS & REVISÕES ---------- -->
+  <!-- ---------- bloco CIRURGIAS & REVISÕES (espelho da planilha) ---------- -->
   <section class="bloco" id="bloco-cirurgias">
-    <div class="bloco-cabecalho">
+    <div class="bloco-cabecalho bloco-cabecalho-compacto">
       <div>
         <h1>cirurgias &amp; revisões<span class="ponto">.</span></h1>
-        <div class="sub">pós-operatório com prazos configuráveis · pré-op com contagem regressiva</div>
       </div>
       <div class="bloco-filtros">
-        <div class="filtros" id="filtros-cirurgias"></div>
+        <div class="filtros cirurgias-anos" id="filtros-cirurgias"></div>
         <div class="grade-busca bloco-busca">
           <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <input type="search" id="busca-cirurgias" placeholder="buscar…">
+          <input type="search" id="busca-cirurgias" placeholder="buscar… (⌘F)">
         </div>
         <button class="btn btn-azul" id="btn-nova-cirurgia" type="button">＋ nova cirurgia</button>
       </div>
     </div>
-    <div id="meses-cirurgias"></div>
-    <div class="linhas cartao" id="linhas-cirurgias"></div>
-    <button class="ver-detalhes" id="btn-det-cirurgias" type="button">▸ ver detalhes — planilha Cirurgias completa</button>
-    <div class="detalhes" id="det-cirurgias" hidden>
-      <div id="grid-cirurgias"></div>
-      <button class="btn btn-fantasma" id="btn-abrir-cirurgias" type="button" style="display:none">abrir no Google ↗</button>
-    </div>
+    <div id="grid-cirurgias"></div>
+    <button class="btn btn-fantasma" id="btn-abrir-cirurgias" type="button" style="display:none">abrir no Google ↗</button>
   </section>
 
   <!-- ---------- bloco LEMBRETES ---------- -->
