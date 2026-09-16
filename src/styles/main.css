@@ -170,7 +170,16 @@ input.linha-obs:focus{outline:none;border-color:var(--azul);background:var(--pap
 .alerta-item .btn-mini{margin-left:auto;flex-shrink:0}
 
 /* ---------- revisões por ano/mês (bloco cirurgias) ---------- */
-.meses-barra{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 2px 8px}
+.bloco-cabecalho-compacto .sub{display:none}
+.bloco-cabecalho-compacto{margin-bottom:12px}
+.cirurgias-anos .filtro .n{
+  font-size:.66rem;font-weight:600;background:var(--creme);color:var(--tinta);
+  border-radius:10px;padding:0 6px;margin-left:4px;
+}
+.cirurgias-anos .filtro.ativo .n{background:rgba(255,255,255,.28);color:#fff}
+.grade-rodape-compacto{justify-content:center;margin-top:10px}
+.grade-rodape-compacto .grade-dica{text-align:center}
+
 .meses-rotulo{
   font-size:.66rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
   color:var(--tinta-suave);

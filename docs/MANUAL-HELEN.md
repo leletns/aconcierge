@@ -19,7 +19,7 @@ Centraliza **Recall** + **Cirurgias** + **retornos pós-op** + **checklist pré-
 | Tela | Para que serve | Quando usar |
 |------|----------------|-------------|
 | **recall** | Lista + grade editável = planilha GESTÃO DE RECALL | Contatar / atualizar status / próximo contato |
-| **cirurgias & revisões** | Cirurgias + régua **revisões por mês** (anos 2025/2026…) + grade Cirurgias BLUE | Ver quem tem revisão em cada mês; status 03m/06m/1a; **＋ nova cirurgia** |
+| **cirurgias & revisões** | Espelho da planilha Cirurgias — edite direto na grade | Filtrar por ano no topo · buscar paciente · **＋ nova cirurgia** |
 | **lembretes** | Anotações com prioridade, data/hora e repetição (estilo app Lembretes do Mac) | Tarefas pessoais da concierge |
 | **acompanhamentos** | Templates de prazos (Botox 15/90/180d, Cirurgia 90/180/365…) | Ajustar regras uma vez |
 
@@ -152,7 +152,7 @@ O checklist **não é mais uma lista genérica**. Ele aplica o protocolo do PDF 
 - Status **Pendente / Marcada / Realizada / Sem resposta** espelha as colunas da planilha.
 - Em **acompanhamentos**, Helen pode criar Botox (15/90/180), Lipedema, etc.
 - Na ficha da paciente: override de prazos só para aquela paciente.
-- **Revisões por mês:** régua de meses no topo do bloco cirurgias — abas **2025 / 2026** (e outros anos da planilha); toque num mês para filtrar; alterne **ordem planilha / data** ao lado.
+- **Cirurgias:** filtro por **ano** no topo (só anos com cirurgia na planilha) · busca · grade igual ao Google Sheets · duplo clique no nome = ficha
 
 ---
 

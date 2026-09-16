@@ -31,7 +31,7 @@ import {
 } from './utils/dates.js';
 import { formatPhoneDisplay, buildWhatsAppLink } from './utils/phone.js';
 import { patientKey } from './utils/matching.js';
-import { estadoMarco, proximoMarco, templateParaCirurgia } from './utils/templates.js';
+import { estadoMarco, templateParaCirurgia } from './utils/templates.js';
 import { Store } from './services/store.js';
 import { SyncService } from './services/syncService.js';
 import { GeminiApi, MODELOS_GEMINI } from './services/geminiApi.js';
@@ -61,12 +61,9 @@ let buscaIndice = 0;
 let atencaoMes = false;
 let alertaColapsado = false;
 let filtroRecall = 'todos';
-let filtroCirurgias = 'todas';
 let buscaRecall = '';
 let buscaCirurgias = '';
-let mesRevisao = ''; // 'yyyy-mm' selecionado na régua "revisões por mês"
-let anoRevisao = isoHoje().slice(0, 4);
-let ordemCirurgias = 'planilha'; // 'planilha' (linha do Sheets) | 'data'
+let anoCirurgias = ''; // '' = todos os anos com cirurgia na planilha; ou '2026', '2027'…
 let conversaSuporte = [];
 let ultimaNovaRecallKey = ''; // destaque da paciente recém-registrada
 let ultimaNovaCirurgiaKey = ''; // destaque da cirurgia recém-cadastrada
@@ -112,7 +109,8 @@ const gridCirurgias = new SpreadsheetGrid({
   colunas: CIRURGIAS_COLS,
   nomeField: 'paciente',
   statusField: 'm3m',
-  getRows: () => store.cirurgias,
+  compact: true,
+  getRows: () => cirurgiasVisiveis(),
   onEdit: (key, field, value) => store.editarCelula('cirurgias', key, field, value),
   onAddRow: () => abrirNovaCirurgia(),
   onOpenFicha: (linha) => abrirFichaDaLinha(linha, 'cirurgias'),
@@ -137,9 +135,6 @@ function primeiroNome(nome) {
   return String(nome || '').trim().split(/\s+/)[0] || '';
 }
 
-function waMsgRevisao(nome, marcoLabel) {
-  return `Olá, ${primeiroNome(nome)}! Aqui é a Helen, da blue. Estou entrando em contato para agendarmos a sua revisão${marcoLabel ? ' de ' + marcoLabel : ''} com o Dr. Rafael. Qual o melhor dia para você?`;
-}
 
 function waMsgRecall(nome) {
   return `Olá, ${primeiroNome(nome)}! Aqui é a Helen, da blue. Como você está? Estou entrando em contato para saber como tem sido a sua evolução e ver se podemos agendar uma avaliação com o Dr. Rafael.`;
@@ -223,10 +218,9 @@ function renderizarTudo() {
   renderAlerta();
   atualizarNavBadges();
   if (!digitandoEm($('#linhas-recall'))) renderLinhasRecall();
-  if (!digitandoEm($('#linhas-cirurgias'))) renderLinhasCirurgias();
+  if (!gridCirurgias.editando) renderCirurgias();
   if (!digitandoEm($('#bloco-lembretes'))) renderLembretes();
   if (detalhesAbertos.recall && !gridRecall.editando) gridRecall.render();
-  if (detalhesAbertos.cirurgias && !gridCirurgias.editando) gridCirurgias.render();
   const acomp = $('#acompanhamentos-lista');
   if ($('#veu-acomp')?.classList.contains('aberto') && !digitandoEm(acomp)) {
     acompanhamentosScreen.render();
@@ -492,233 +486,72 @@ function revisoesPorMes() {
   return mapa;
 }
 
-/** anos presentes na planilha (cirurgias + revisões) + o ano corrente, em ordem */
-function anosDisponiveis() {
-  const anos = new Set([isoHoje().slice(0, 4)]);
+/** anos com cirurgia real na planilha (data da coluna Data — não revisões) */
+function anosCirurgias() {
+  const anos = new Set();
   for (const c of store.cirurgias) {
+    if (!String(c.paciente || '').trim()) continue;
     const iso = parseDataPt(c.data);
     if (iso) anos.add(iso.slice(0, 4));
   }
-  for (const chave of revisoesPorMes().keys()) anos.add(chave.slice(0, 4));
   return [...anos].sort();
 }
 
-function renderMesesCirurgias() {
-  const el = $('#meses-cirurgias');
-  if (!el) return;
-  const mapa = revisoesPorMes();
-  const anos = anosDisponiveis();
-  if (!anos.includes(anoRevisao)) anoRevisao = anos.includes(isoHoje().slice(0, 4)) ? isoHoje().slice(0, 4) : anos[anos.length - 1];
-
-  const porAno = (ano) =>
-    [...mapa.entries()].reduce((n, [k, v]) => (k.startsWith(ano) ? n + v.length : n), 0);
-
-  const abasAno = anos
-    .map(
-      (a) =>
-        `<button type="button" class="ano-aba ${a === anoRevisao ? 'ativo' : ''}" data-ano="${a}">${a} <span class="n">${porAno(a)}</span></button>`,
-    )
-    .join('');
-
-  const pilulas = [];
-  for (let m = 0; m < 12; m++) {
-    const chave = `${anoRevisao}-${String(m + 1).padStart(2, '0')}`;
-    const n = (mapa.get(chave) || []).length;
-    const rotulo = new Date(Number(anoRevisao), m, 1)
-      .toLocaleDateString('pt-BR', { month: 'short' })
-      .replace('.', '');
-    pilulas.push(
-      `<button type="button" class="mes-pilula ${mesRevisao === chave ? 'ativo' : ''} ${n ? '' : 'vazio'}" data-mes="${chave}">${rotulo} <span class="n">${n}</span></button>`,
-    );
+function garantirAnoCirurgias() {
+  const anos = anosCirurgias();
+  if (!anos.length) {
+    anoCirurgias = '';
+    return;
   }
-
-  el.innerHTML = `
-    <div class="meses-barra">
-      <div class="meses-rotulo">revisões por mês — toque para filtrar</div>
-      <div class="anos">${abasAno}</div>
-      <div class="ordem-toggle" title="a ordem 'planilha' é exatamente a das linhas do Google Sheets">
-        <span>ordem</span>
-        <button type="button" class="${ordemCirurgias === 'planilha' ? 'ativo' : ''}" data-ordem="planilha">planilha</button>
-        <button type="button" class="${ordemCirurgias === 'data' ? 'ativo' : ''}" data-ordem="data">data</button>
-      </div>
-    </div>
-    <div class="meses">${pilulas.join('')}</div>`;
-
-  el.querySelectorAll('[data-ano]').forEach((b) =>
-    b.addEventListener('click', () => {
-      anoRevisao = b.dataset.ano;
-      if (mesRevisao && !mesRevisao.startsWith(anoRevisao)) mesRevisao = '';
-      renderLinhasCirurgias();
-    }),
-  );
-  el.querySelectorAll('[data-mes]').forEach((b) =>
-    b.addEventListener('click', () => {
-      mesRevisao = mesRevisao === b.dataset.mes ? '' : b.dataset.mes;
-      renderLinhasCirurgias();
-    }),
-  );
-  el.querySelectorAll('[data-ordem]').forEach((b) =>
-    b.addEventListener('click', () => {
-      ordemCirurgias = b.dataset.ordem;
-      renderLinhasCirurgias();
-    }),
-  );
+  if (anoCirurgias && anos.includes(anoCirurgias)) return;
+  const hoje = isoHoje().slice(0, 4);
+  anoCirurgias = anos.includes(hoje) ? hoje : anos[anos.length - 1];
 }
 
-function renderLinhasCirurgias() {
-  const el = $('#linhas-cirurgias');
-
-  const chips = [
-    ['todas', 'todas'],
-    ['vencidas', 'revisões vencidas'],
-    ['mes', 'este mês'],
-    ['preop', 'pré-op'],
-    ['concluidas', 'concluídas'],
-  ];
-  $('#filtros-cirurgias').innerHTML = chips
-    .map(([id, rotulo]) => `<button class="filtro ${!mesRevisao && filtroCirurgias === id ? 'ativo' : ''}" data-fc="${id}">${rotulo}</button>`)
-    .join('');
-  $('#filtros-cirurgias').querySelectorAll('[data-fc]').forEach((b) =>
-    b.addEventListener('click', () => {
-      filtroCirurgias = b.dataset.fc;
-      mesRevisao = '';
-      renderLinhasCirurgias();
-    }),
-  );
-
-  renderMesesCirurgias();
-
-  const fim = fimDoMes();
-  let itens = store.cirurgias
-    .filter((c) => String(c.paciente || '').trim())
-    .map((c) => {
-      const iso = parseDataPt(c.data);
-      const futura = iso && difDias(iso) >= 0;
-      const marcos = futura ? [] : store.marcosDe(c);
-      const px = futura ? null : proximoMarco(marcos);
-      return { c, iso, futura, marcos, px };
-    });
-
-  if (mesRevisao) {
-    // mês selecionado: qualquer marco naquele mês (não só o próximo) + cirurgias do mês
-    itens = itens
-      .filter(
-        ({ marcos, iso }) =>
-          marcos.some((m) => m.dataISO && m.dataISO.startsWith(mesRevisao)) ||
-          (iso && iso.startsWith(mesRevisao)),
-      )
-      .map((it) => {
-        const doMes = it.marcos.find((m) => m.dataISO && m.dataISO.startsWith(mesRevisao));
-        return doMes ? { ...it, px: doMes } : it;
-      });
-  } else if (filtroCirurgias === 'vencidas') itens = itens.filter(({ px }) => px && px.dataISO && difDias(px.dataISO) <= 0);
-  else if (filtroCirurgias === 'mes') itens = itens.filter(({ px, futura, iso }) => (px && px.dataISO && px.dataISO <= fim) || (futura && iso <= fim));
-  else if (filtroCirurgias === 'preop') itens = itens.filter(({ futura }) => futura);
-  else if (filtroCirurgias === 'concluidas') itens = itens.filter(({ futura, px }) => !futura && !px);
-
-  if (atencaoMes) {
-    itens = itens.filter(({ px, futura, iso }) => (px && px.dataISO && px.dataISO <= fim) || (futura && iso && iso <= fim));
-  }
-  itens = itens.filter(({ c }) => contemBusca(c, ['paciente', 'cirurgia', 'hospital'], buscaCirurgias));
-
-  // "planilha" = mesma sequência do ver detalhes (linha do Sheets); "data" = pela data da cirurgia
-  itens.sort((a, b) => {
-    if (ordemCirurgias === 'planilha') {
-      const ra = a.c.row ?? Number.MAX_SAFE_INTEGER;
-      const rb = b.c.row ?? Number.MAX_SAFE_INTEGER;
-      if (ra !== rb) return ra - rb;
-    }
-    const da = a.iso || '9999-99-99';
-    const db = b.iso || '9999-99-99';
+function cirurgiasVisiveis() {
+  let rows = store.cirurgias.filter((c) => String(c.paciente || '').trim());
+  if (anoCirurgias) rows = rows.filter((c) => parseDataPt(c.data)?.startsWith(anoCirurgias));
+  rows.sort((a, b) => {
+    const ra = a.row ?? Number.MAX_SAFE_INTEGER;
+    const rb = b.row ?? Number.MAX_SAFE_INTEGER;
+    if (ra !== rb) return ra - rb;
+    const da = parseDataPt(a.data) || '9999-99-99';
+    const db = parseDataPt(b.data) || '9999-99-99';
     return da < db ? -1 : da > db ? 1 : 0;
   });
-
-  el.innerHTML = itens.length
-    ? itens
-        .map(({ c, iso, futura, px }) => {
-          const p = store.pacienteDaLinha(c, 'cirurgias');
-          const pKey = p ? p.key : patientKey(c.paciente);
-          const recallRow = p?.recallRows[p.recallRows.length - 1];
-          const obsValor = recallRow ? recallRow.obs || '' : store.extrasDe(pKey).nota || '';
-
-          let statusHtml;
-          let dataHtml;
-          if (futura) {
-            const dd = difDias(iso);
-            statusHtml = `<span class="linha-status st-azul linha-status-fixo">pré-op · ${dd === 0 ? 'é hoje' : 'faltam ' + dd + 'd'}</span>`;
-            dataHtml = `<span class="linha-data">${esc(c.data)}</span>`;
-          } else if (px) {
-            const dd = px.dataISO ? difDias(px.dataISO) : null;
-            statusHtml = `<select class="linha-status ${SELO_MARCO[px.status] || 'st-neutro'}" data-marco="${c.key}:${px.id}" title="revisão ${esc(px.label)} — salva na planilha">
-              ${STATUS_MARCO.map((s) => `<option ${px.status === s ? 'selected' : ''}>${s}</option>`).join('')}
-            </select>`;
-            dataHtml = `<span class="linha-data ${dd !== null && dd < 0 ? 'vencida' : ''}" title="revisão ${esc(px.label)}">${px.dataISO ? fmt(px.dataISO) : '—'} · ${esc(px.label)}</span>`;
-          } else {
-            statusHtml = `<span class="linha-status st-verde linha-status-fixo">revisões concluídas ✓</span>`;
-            dataHtml = `<span class="linha-data">—</span>`;
-          }
-
-          return `<div class="linha ${c.key === ultimaNovaCirurgiaKey ? 'linha-nova' : ''}" data-key="${c.key}">
-        <div class="linha-nome" data-ficha-cir="${c.key}" title="abrir ficha">
-          ${esc(c.paciente)}
-          <span class="linha-sub" title="${esc(c.cirurgia || '')}">${esc((c.cirurgia || '').slice(0, 60))}${(c.cirurgia || '').length > 60 ? '…' : ''}</span>
-        </div>
-        ${statusHtml}
-        ${dataHtml}
-        <input class="linha-obs" data-obs-cir="${c.key}" value="${esc(obsValor)}" placeholder="${recallRow ? 'observações (planilha Recall)…' : 'observações (nota do app)…'}">
-        <div class="linha-acoes">
-          ${waBtnMini(p?.telefone, waMsgRevisao(c.paciente, px?.label))}
-        </div>
-      </div>`;
-        })
-        .join('')
-    : `<div class="vazio"><strong>${mesRevisao ? 'nenhuma revisão em ' + esc(rotuloMes(mesRevisao)) : 'nenhuma cirurgia aqui'}</strong>${mesRevisao ? 'toque no mês de novo para limpar o filtro' : 'ajuste a busca ou os filtros'}</div>`;
-
-  bindLinhasCirurgias(el);
+  return rows;
 }
 
-function rotuloMes(chave) {
-  const d = paraData(chave + '-01');
-  return d ? d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : chave;
+function renderFiltrosAnoCirurgias() {
+  const el = $('#filtros-cirurgias');
+  if (!el) return;
+  garantirAnoCirurgias();
+  const anos = anosCirurgias();
+  if (!anos.length) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = anos
+    .map((a) => {
+      const n = store.cirurgias.filter((c) => {
+        if (!String(c.paciente || '').trim()) return false;
+        return parseDataPt(c.data)?.startsWith(a);
+      }).length;
+      return `<button type="button" class="filtro ${a === anoCirurgias ? 'ativo' : ''}" data-ano="${a}">${a} <span class="n">${n}</span></button>`;
+    })
+    .join('');
+  el.querySelectorAll('[data-ano]').forEach((b) =>
+    b.addEventListener('click', () => {
+      anoCirurgias = b.dataset.ano;
+      renderCirurgias();
+    }),
+  );
 }
 
-function bindLinhasCirurgias(el) {
-  el.querySelectorAll('[data-ficha-cir]').forEach((n) =>
-    n.addEventListener('click', () => {
-      const linha = store.getCirurgiaRow(n.dataset.fichaCir);
-      if (linha) abrirFichaDaLinha(linha, 'cirurgias');
-    }),
-  );
-  el.querySelectorAll('[data-marco]').forEach((s) =>
-    s.addEventListener('change', () => {
-      s.blur();
-      const [cirKey, marcoId] = s.dataset.marco.split(':');
-      const c = store.getCirurgiaRow(cirKey);
-      const marco = c && store.marcosDe(c).find((m) => m.id === marcoId);
-      if (marco) {
-        store.setMarcoStatus(c, marco, s.value);
-        showToast(s.value === 'Realizada' ? 'revisão concluída ✓' : 'status da revisão salvo');
-      }
-    }),
-  );
-  el.querySelectorAll('[data-obs-cir]').forEach((i) => {
-    const salvar = debounce(() => {
-      const c = store.getCirurgiaRow(i.dataset.obsCir);
-      if (!c) return;
-      const p = store.pacienteDaLinha(c, 'cirurgias');
-      const recallRow = p?.recallRows[p.recallRows.length - 1];
-      if (recallRow) {
-        if (i.value !== (recallRow.obs || '')) store.editarCelula('recall', recallRow.key, 'obs', i.value);
-      } else {
-        const pKey = p ? p.key : patientKey(c.paciente);
-        store.extrasDe(pKey).nota = i.value;
-        store.salvarExtras();
-      }
-    }, 800);
-    i.addEventListener('input', salvar);
-    i.addEventListener('keydown', (e) => e.key === 'Enter' && i.blur());
-  });
-  bindWa(el);
+function renderCirurgias() {
+  renderFiltrosAnoCirurgias();
+  gridCirurgias.busca = buscaCirurgias;
+  gridCirurgias.render();
 }
 
 /* ---------- LEMBRETES (fiel ao app Lembretes do Mac/iOS) ---------- */
@@ -1676,8 +1509,6 @@ function salvarNovaCirurgia() {
   const padrao = store.appConfig.templates.find((t) => t.padrao)?.id || '';
   const criarRecall = $('#nc-recall')?.checked && fone;
 
-  filtroCirurgias = 'todas';
-  mesRevisao = '';
   buscaCirurgias = '';
   const buscaEl = $('#busca-cirurgias');
   if (buscaEl) buscaEl.value = '';
@@ -1702,12 +1533,12 @@ function salvarNovaCirurgia() {
   }
 
   ultimaNovaCirurgiaKey = linha.key;
-  anoRevisao = iso.slice(0, 4);
-  renderLinhasCirurgias();
+  anoCirurgias = iso.slice(0, 4);
+  renderCirurgias();
   fechar('veu-nova-cirurgia');
   requestAnimationFrame(() => {
     document
-      .querySelector(`#linhas-cirurgias .linha[data-key="${linha.key}"]`)
+      .querySelector(`#grid-cirurgias tr[data-row="${linha.key}"]`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
   setTimeout(() => {
@@ -2118,8 +1949,8 @@ function initApp() {
   verificarNotificacoes();
   setInterval(verificarNotificacoes, 30000);
 
-  // ver detalhes (planilhas ocultas)
-  [['recall', gridRecall], ['cirurgias', gridCirurgias]].forEach(([tipo, grid]) => {
+  // ver detalhes (planilha recall oculta por padrão)
+  [['recall', gridRecall]].forEach(([tipo, grid]) => {
     const btn = $('#btn-det-' + tipo);
     const det = $('#det-' + tipo);
     btn?.addEventListener('click', () => {
@@ -2138,7 +1969,7 @@ function initApp() {
   });
   $('#busca-cirurgias')?.addEventListener('input', (e) => {
     buscaCirurgias = e.target.value;
-    renderLinhasCirurgias();
+    renderCirurgias();
     $('#busca-cirurgias').focus();
   });
 
@@ -2147,8 +1978,7 @@ function initApp() {
     atencaoMes = !atencaoMes;
     $('#btn-atencao-mes').classList.toggle('ativo', atencaoMes);
     renderLinhasRecall();
-    renderLinhasCirurgias();
-    showToast(atencaoMes ? 'mostrando só quem precisa de atenção este mês' : 'mostrando todas');
+    showToast(atencaoMes ? 'mostrando só quem precisa de atenção este mês no recall' : 'mostrando todas');
   });
 
   // rodapé técnico
@@ -2189,7 +2019,9 @@ function initApp() {
     }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
       e.preventDefault();
-      $('#busca-recall')?.focus();
+      const blocoCir = document.getElementById('bloco-cirurgias');
+      const noCir = blocoCir && blocoCir.getBoundingClientRect().top < window.innerHeight * 0.45;
+      (noCir ? $('#busca-cirurgias') : $('#busca-recall'))?.focus();
     }
   });
 

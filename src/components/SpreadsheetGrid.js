@@ -142,8 +142,9 @@ export class SpreadsheetGrid {
         .join('');
     }
 
-    el.innerHTML = `
-      <div class="grade-barra">
+    const barra = this.o.compact
+      ? ''
+      : `<div class="grade-barra">
         ${smart ? `<div class="filtros grade-filtros grade-smart">${smart}</div>` : ''}
         <div class="filtros grade-filtros">${filtros}</div>
         <div class="grade-busca">
@@ -151,17 +152,23 @@ export class SpreadsheetGrid {
           <input type="search" placeholder="buscar na planilha… (⌘F)" value="${esc(this.busca)}">
           <span class="grade-contagem">${rows.length} linha${rows.length !== 1 ? 's' : ''}${allRows.length !== rows.length ? ` de ${allRows.length}` : ''}</span>
         </div>
-      </div>
+      </div>`;
+
+    const rodape = this.o.compact
+      ? `<div class="grade-rodape grade-rodape-compacto"><span class="grade-dica">edite na grade — sincroniza com o Google · Enter salva · duplo clique no nome = ficha</span></div>`
+      : `<div class="grade-rodape">
+        <button class="btn btn-claro" data-add-row>＋ ${esc(this.o.addRowLabel || 'nova linha')}</button>
+        <span class="grade-dica">edite aqui — sincroniza sozinho com o Google · Enter salva · Esc cancela · duplo clique no nome = ficha</span>
+      </div>`;
+
+    el.innerHTML = `${barra}
       <div class="cartao tabela-envolto grade-envolto">
         <table class="grade">
           <thead><tr>${ths}</tr></thead>
           <tbody>${corpo}</tbody>
         </table>
       </div>
-      <div class="grade-rodape">
-        <button class="btn btn-claro" data-add-row>＋ nova paciente</button>
-        <span class="grade-dica">edite aqui — sincroniza sozinho com o Google · Enter salva · Esc cancela · duplo clique no nome = ficha</span>
-      </div>`;
+      ${rodape}`;
 
     this.bind();
   }
