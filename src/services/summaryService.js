@@ -44,59 +44,45 @@ class LocalSummaryProvider {
   }
 }
 
-class ClientGeminiProvider {
-  constructor(apiKey) {
-    this.apiKey = apiKey;
-  }
-  get configured() {
-    return Boolean(this.apiKey);
-  }
-  async generate(snapshot) {
-    const prompt =
-      'Resumo da Paciente em português brasileiro (bullet points): Nome, Procedimento/Cirurgia, ' +
-      'Situação do recall, Retornos, Próximo passo, Observações.\n\n' +
-      JSON.stringify(snapshot, null, 2);
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.35, maxOutputTokens: 1024 },
-        }),
-      },
-    );
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error?.message || 'Gemini error');
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Resposta vazia');
-    return { text: text.trim(), provider: 'gemini' };
-  }
-}
+export const PAPEL_CONCIERGE =
+  'Você é a assistente da Helen, concierge da clínica blue. (Dr. Rafael, cirurgia plástica, Rio de Janeiro). ' +
+  'Responda SEMPRE em português do Brasil, com frases curtas e diretas, tom acolhedor e profissional. ' +
+  'Fale de pacientes com discrição. Nunca dê orientação médica — foque em relacionamento, ' +
+  'agendamento e organização do recall. Não invente dados que não estejam no material recebido.';
 
 export class SummaryService {
-  constructor({ geminiApiKey, sheetsApi } = {}) {
+  constructor({ gemini = null, sheetsApi = null } = {}) {
     this.local = new LocalSummaryProvider();
-    this.clientGemini = geminiApiKey ? new ClientGeminiProvider(geminiApiKey) : null;
-    this.sheetsApi = sheetsApi || null;
+    this.gemini = gemini;
+    this.sheetsApi = sheetsApi;
   }
 
   setSheetsApi(api) {
     this.sheetsApi = api;
   }
 
-  /** Preferência: Gemini via Apps Script → Gemini direto → resumo local */
+  setGemini(gemini) {
+    this.gemini = gemini;
+  }
+
+  /** Preferência: Gemini com a chave da clínica → Gemini via Apps Script → resumo local */
   async summarize(snapshot) {
+    if (this.gemini?.configured) {
+      try {
+        const text = await this.gemini.gerar(
+          'Faça um resumo da paciente para a concierge usar antes de ligar. Use tópicos curtos com estes títulos: ' +
+            'Quem é, Situação do recall, Retornos, Próximo passo, Cuidados na conversa. ' +
+            'No "Próximo passo", sugira a ação concreta de hoje.\n\nDados da paciente (JSON):\n' +
+            JSON.stringify(snapshot, null, 2),
+          { sistema: PAPEL_CONCIERGE, temperatura: 0.35 },
+        );
+        return { text, provider: 'gemini' };
+      } catch (_) {}
+    }
     if (this.sheetsApi?.configured) {
       try {
         const result = await this.sheetsApi.summarize(snapshot);
         return { text: result.text, provider: result.provider || 'gemini' };
-      } catch (_) {}
-    }
-    if (this.clientGemini?.configured) {
-      try {
-        return await this.clientGemini.generate(snapshot);
       } catch (_) {}
     }
     return this.local.generate(snapshot);

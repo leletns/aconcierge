@@ -17,6 +17,127 @@ import { isoHoje, paraData } from '../utils/dates.js';
 
 const uid = () => 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+const DIAS_SEMANA = {
+  domingo: 0, dom: 0,
+  segunda: 1, seg: 1,
+  terca: 2, ter: 2,
+  quarta: 3, qua: 3,
+  quinta: 4, qui: 4,
+  sexta: 5, sex: 5,
+  sabado: 6, sab: 6,
+};
+
+const semAcento = (s) =>
+  String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const isoDe = (d) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/**
+ * Interpreta o que a Helen digita no campo rápido e já preenche o lembrete:
+ * "ligar pra Ana amanhã 14h !!" → título "ligar pra Ana", amanhã, 14:00, prioridade média.
+ * Entende: hoje · amanhã · depois de amanhã · segunda…domingo · próxima sexta ·
+ * em 3 dias · dia 12 · 12/03 · 14h · 14:30 · às 9 · ! !! !!! · "todo dia|toda semana|todo mês".
+ * O texto reconhecido sai do título — o resto continua como ela escreveu.
+ */
+export function interpretarLembrete(textoBruto) {
+  let titulo = String(textoBruto || '').trim();
+  const out = { titulo, dataISO: '', hora: '', prioridade: 'nenhuma', repetir: 'nunca' };
+  if (!titulo) return out;
+
+  const hojeD = paraData(isoHoje());
+  const corta = (re) => {
+    const m = semAcento(titulo).match(re);
+    if (!m) return null;
+    // remove do título original preservando acentos (mesmo índice/comprimento)
+    titulo = (titulo.slice(0, m.index) + ' ' + titulo.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
+    return m;
+  };
+
+  // prioridade: !!! !! !
+  const mPrio = corta(/(?:^|\s)(!{1,3})(?=\s|$)/);
+  if (mPrio) out.prioridade = { 1: 'baixa', 2: 'media', 3: 'alta' }[mPrio[1].length];
+
+  // repetição
+  const mRep = corta(/(?:^|\s)(todo dia|todos os dias|diariamente|toda semana|semanalmente|todo mes|mensalmente|todo ano|anualmente)(?=\s|$)/);
+  if (mRep) {
+    const r = mRep[1];
+    out.repetir = /dia|diariamente/.test(r)
+      ? 'diario'
+      : /semana/.test(r)
+        ? 'semanal'
+        : /mes|mensal/.test(r)
+          ? 'mensal'
+          : 'anual';
+  }
+
+  // hora: "14h", "14h30", "14:30", "às 9"
+  const mHora = corta(/(?:^|\s)(?:as\s+)?([01]?\d|2[0-3])\s*(?:h|:)\s*([0-5]\d)?(?:\s*(?:hs|horas?))?(?=\s|$)/);
+  if (mHora) out.hora = `${String(mHora[1]).padStart(2, '0')}:${mHora[2] || '00'}`;
+
+  // datas relativas e nomeadas
+  let data = null;
+  if (corta(/(?:^|\s)depois de amanha(?=\s|$)/)) {
+    data = new Date(hojeD);
+    data.setDate(data.getDate() + 2);
+  } else if (corta(/(?:^|\s)amanha(?=\s|$)/)) {
+    data = new Date(hojeD);
+    data.setDate(data.getDate() + 1);
+  } else if (corta(/(?:^|\s)hoje(?=\s|$)/)) {
+    data = new Date(hojeD);
+  } else {
+    const mEm = corta(/(?:^|\s)em\s+(\d{1,3})\s*(dias?|semanas?|meses|mes)(?=\s|$)/);
+    if (mEm) {
+      data = new Date(hojeD);
+      const n = Number(mEm[1]);
+      if (/semana/.test(mEm[2])) data.setDate(data.getDate() + n * 7);
+      else if (/mes/.test(mEm[2])) data.setMonth(data.getMonth() + n);
+      else data.setDate(data.getDate() + n);
+    } else {
+      const mDia = corta(
+        /(?:^|\s)(?:na\s+|a\s+)?(?:(proxima|proximo)\s+)?(domingo|segunda|terca|quarta|quinta|sexta|sabado|dom|seg|ter|qua|qui|sex|sab)(?:-feira|\s+feira)?(?=\s|$)/,
+      );
+      if (mDia) {
+        const alvo = DIAS_SEMANA[mDia[2]];
+        data = new Date(hojeD);
+        let delta = (alvo - data.getDay() + 7) % 7;
+        if (delta === 0) delta = 7; // "sexta" dito na sexta = próxima sexta
+        if (mDia[1] && delta <= 0) delta += 7;
+        data.setDate(data.getDate() + delta);
+      } else {
+        const mData = corta(/(?:^|\s)(?:dia\s+)?(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?(?=\s|$)/);
+        if (mData) {
+          const ano = mData[3] ? (mData[3].length === 2 ? 2000 + Number(mData[3]) : Number(mData[3])) : hojeD.getFullYear();
+          data = new Date(ano, Number(mData[2]) - 1, Number(mData[1]));
+          if (!mData[3] && data < hojeD) data.setFullYear(ano + 1);
+        } else {
+          const mSoDia = corta(/(?:^|\s)dia\s+(\d{1,2})(?=\s|$)/);
+          if (mSoDia) {
+            const n = Number(mSoDia[1]);
+            data = new Date(hojeD.getFullYear(), hojeD.getMonth(), n);
+            if (data < hojeD) data.setMonth(data.getMonth() + 1);
+          }
+        }
+      }
+    }
+  }
+  if (data && !Number.isNaN(data.getTime())) out.dataISO = isoDe(data);
+
+  // hora sem data = hoje (ou amanhã se já passou)
+  if (out.hora && !out.dataISO) {
+    const agora = new Date();
+    const [hh, mm] = out.hora.split(':').map(Number);
+    const d = new Date(hojeD);
+    if (hh * 60 + mm <= agora.getHours() * 60 + agora.getMinutes()) d.setDate(d.getDate() + 1);
+    out.dataISO = isoDe(d);
+  }
+
+  out.titulo = titulo.replace(/\s+(de|para|pra|as|às|no|na|em)$/i, '').trim() || String(textoBruto).trim();
+  return out;
+}
+
 export const prioridadeDe = (id) =>
   PRIORIDADES_LEMBRETE.find((p) => p.id === id) || PRIORIDADES_LEMBRETE[0];
 

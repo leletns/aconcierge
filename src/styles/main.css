@@ -13,6 +13,8 @@
   --ambar-fundo:#F8F0E4;
   --coral:#C46B5C;
   --coral-fundo:#F6E9E6;
+  --neutro-fundo:#F1F0EC;   /* mesmo cinza da formatação condicional da planilha */
+  --cabecalho-planilha:#4A6484;
   --sombra:0 1px 2px rgba(43,52,64,.04), 0 8px 24px rgba(43,52,64,.06);
   --raio:14px;
   --fonte-app:'Montserrat',-apple-system,BlinkMacSystemFont,sans-serif;
@@ -81,7 +83,7 @@ select.linha-status{
 .st-ambar{background:var(--ambar-fundo);color:#A9793C}
 .st-coral{background:var(--coral-fundo);color:var(--coral)}
 .st-azul{background:var(--azul-fundo);color:var(--azul-escuro)}
-.st-neutro{background:var(--creme);color:var(--tinta-suave)}
+.st-neutro{background:var(--neutro-fundo);color:var(--tinta-suave)}
 input.linha-data,span.linha-data{
   font-family:inherit;font-size:.78rem;color:var(--tinta);background:none;border:none;
   border-bottom:1px dashed transparent;padding:4px 2px;white-space:nowrap;overflow:hidden;
@@ -167,11 +169,33 @@ input.linha-obs:focus{outline:none;border-color:var(--azul);background:var(--pap
 .alerta-det{color:var(--tinta-suave);font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .alerta-item .btn-mini{margin-left:auto;flex-shrink:0}
 
-/* ---------- revisões por mês (bloco cirurgias) ---------- */
+/* ---------- revisões por ano/mês (bloco cirurgias) ---------- */
+.meses-barra{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 2px 8px}
 .meses-rotulo{
   font-size:.66rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--tinta-suave);margin:0 2px 7px;
+  color:var(--tinta-suave);
 }
+.anos{display:flex;gap:6px}
+.ano-aba{
+  font-family:inherit;font-size:.78rem;font-weight:700;letter-spacing:-.01em;
+  background:var(--papel);border:1px solid var(--linha);color:var(--tinta-suave);
+  border-radius:10px;padding:5px 11px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;
+  transition:all .15s;
+}
+.ano-aba:hover{border-color:var(--azul);color:var(--azul-escuro)}
+.ano-aba.ativo{background:var(--azul-escuro);border-color:var(--azul-escuro);color:#fff}
+.ano-aba .n{font-size:.66rem;font-weight:600;background:var(--creme);color:var(--tinta);border-radius:10px;padding:0 6px}
+.ano-aba.ativo .n{background:rgba(255,255,255,.28);color:#fff}
+.ordem-toggle{
+  margin-left:auto;display:flex;align-items:center;gap:4px;font-size:.7rem;color:var(--tinta-suave);
+  background:var(--papel);border:1px solid var(--linha);border-radius:10px;padding:3px 4px 3px 10px;
+}
+.ordem-toggle button{
+  font-family:inherit;font-size:.72rem;font-weight:600;color:var(--tinta-suave);
+  background:none;border:none;border-radius:7px;padding:4px 9px;cursor:pointer;
+}
+.ordem-toggle button:hover{color:var(--azul-escuro)}
+.ordem-toggle button.ativo{background:var(--azul-fundo);color:var(--azul-escuro)}
 .meses{display:flex;gap:8px;overflow-x:auto;padding:1px 2px 10px;scrollbar-width:thin}
 .mes-pilula{
   flex-shrink:0;font-family:inherit;font-size:.74rem;font-weight:600;
@@ -280,6 +304,111 @@ input.linha-obs:focus{outline:none;border-color:var(--azul);background:var(--pap
 .rodape-lembrete{justify-content:flex-end}
 .rodape-lembrete .btn-perigo{color:var(--coral);margin-right:auto}
 .rodape-lembrete .btn-perigo:hover{background:var(--coral-fundo)}
+
+/* ---------- sino de notificações ---------- */
+.btn-sino{
+  position:relative;background:var(--papel);border:1px solid var(--linha);color:var(--tinta-suave);
+  padding:9px 11px;
+}
+.btn-sino:hover{border-color:var(--azul);color:var(--azul-escuro)}
+.btn-sino svg{stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.btn-sino.tocando{border-color:var(--coral);color:var(--coral)}
+.sino-badge{
+  position:absolute;top:-5px;right:-5px;background:var(--coral);color:#fff;
+  font-size:.62rem;font-weight:700;min-width:17px;height:17px;border-radius:20px;padding:0 5px;
+  display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--creme);
+}
+.painel-sino{
+  position:absolute;top:calc(100% - 4px);right:28px;z-index:80;width:340px;max-width:calc(100vw - 32px);
+  background:var(--papel);border:1px solid var(--linha);border-radius:14px;
+  box-shadow:0 18px 44px rgba(43,52,64,.2);overflow:hidden;
+}
+.painel-sino[hidden]{display:none}
+.painel-sino-topo{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;border-bottom:1px solid var(--linha);font-size:.9rem;
+}
+.painel-sino-topo .ponto{color:var(--azul)}
+.painel-sino-fechar{
+  background:none;border:none;font-size:1.15rem;line-height:1;color:var(--tinta-suave);
+  cursor:pointer;padding:0 4px;border-radius:6px;
+}
+.painel-sino-fechar:hover{color:var(--coral)}
+.painel-sino-permissao{
+  display:flex;align-items:center;gap:9px;padding:10px 14px;background:var(--azul-fundo);
+  font-size:.74rem;color:var(--azul-escuro);
+}
+.painel-sino-permissao .btn-mini{flex-shrink:0}
+.sino-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-top:1px solid var(--linha)}
+.sino-item:first-child{border-top:none}
+.sino-item:hover{background:rgba(111,141,176,.05)}
+.sino-item.urgente{background:rgba(196,107,92,.05)}
+.sino-corpo{flex:1;min-width:0;cursor:pointer}
+.sino-titulo{font-size:.84rem;font-weight:500;display:flex;gap:6px;align-items:baseline;line-height:1.3}
+.sino-meta{font-size:.72rem;color:var(--tinta-suave);margin-top:2px}
+.sino-item.urgente .sino-meta{color:var(--coral);font-weight:600}
+.sino-adiar{
+  font-family:inherit;font-size:.7rem;font-weight:600;color:var(--tinta-suave);
+  background:none;border:1px solid var(--linha);border-radius:7px;padding:4px 9px;cursor:pointer;flex-shrink:0;
+}
+.sino-adiar:hover{border-color:var(--azul);color:var(--azul-escuro)}
+.sino-vazio{padding:22px 14px;text-align:center;font-size:.8rem;color:var(--tinta-suave)}
+.painel-sino-rodape{
+  width:100%;font-family:inherit;font-size:.76rem;font-weight:600;color:var(--azul-escuro);
+  background:var(--creme);border:none;border-top:1px solid var(--linha);padding:11px 14px;cursor:pointer;
+}
+.painel-sino-rodape:hover{background:var(--azul-fundo)}
+
+/* ---------- assistente / suporte ---------- */
+.modal-suporte{max-width:560px}
+.sup-sugestoes{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.sup-sugestoes[hidden]{display:none}
+.sup-chip{
+  font-family:inherit;font-size:.76rem;color:var(--azul-escuro);background:var(--azul-fundo);
+  border:none;border-radius:20px;padding:7px 13px;cursor:pointer;text-align:left;
+}
+.sup-chip:hover{background:var(--azul);color:#fff}
+.sup-conversa{display:flex;flex-direction:column;gap:9px;max-height:42vh;overflow-y:auto;margin-bottom:12px}
+.sup-conversa:empty{display:none}
+.sup-msg{font-size:.84rem;line-height:1.55;padding:10px 13px;border-radius:13px;max-width:88%}
+.sup-msg.helen{align-self:flex-end;background:var(--azul);color:#fff;border-bottom-right-radius:4px}
+.sup-msg.bot{align-self:flex-start;background:var(--creme);color:var(--tinta);border-bottom-left-radius:4px}
+.sup-entrada{display:flex;gap:8px}
+.sup-entrada input{
+  flex:1;font-family:inherit;font-size:.86rem;color:var(--tinta);background:var(--papel);
+  border:1px solid var(--linha);border-radius:10px;padding:10px 13px;
+}
+.sup-entrada input:focus{outline:none;border-color:var(--azul)}
+.rodape-suporte{justify-content:space-between;align-items:center}
+.rodape-suporte .btn-wa{text-decoration:none;font-size:.78rem;padding:9px 15px}
+
+/* ---------- config do Gemini ---------- */
+.cfg-gemini{
+  margin-top:16px;padding:14px 16px;border:1px dashed var(--azul);border-radius:12px;
+  background:var(--azul-fundo);font-size:.76rem;color:var(--tinta-suave);line-height:1.55;
+  display:flex;flex-direction:column;gap:6px;
+}
+.cfg-gemini strong{color:var(--azul-escuro);font-size:.8rem}
+.cfg-gemini a{color:var(--azul-escuro);font-weight:600}
+.cfg-gemini .linha-campos{margin-top:4px}
+.cfg-gemini .campo-grupo{margin-bottom:0}
+.cfg-gemini-acoes{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cfg-gemini-acoes .btn{padding:7px 14px;font-size:.76rem}
+.cfg-gemini-acoes .campo-hint,.cfg-gemini-acoes .campo-ok{margin-top:0}
+
+/* ---------- atalhos de data do lembrete ---------- */
+.lem-atalhos{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.lem-atalho{
+  font-family:inherit;font-size:.74rem;font-weight:500;color:var(--tinta-suave);
+  background:var(--papel);border:1px solid var(--linha);border-radius:20px;
+  padding:6px 12px;cursor:pointer;transition:all .15s;
+}
+.lem-atalho:hover{border-color:var(--azul);color:var(--azul-escuro)}
+.lem-atalho.ativo{background:var(--azul);border-color:var(--azul);color:#fff}
+.lem-parse{
+  padding:2px 16px 8px 50px;font-size:.73rem;color:var(--azul-escuro);font-weight:500;
+}
+.lem-parse[hidden]{display:none}
 
 /* ---------- seletor de fonte ---------- */
 .fonte-picker{
@@ -395,7 +524,7 @@ input.linha-obs:focus{outline:none;border-color:var(--azul);background:var(--pap
 .selo-verde{background:var(--verde-fundo);color:#4E7A5D}
 .selo-ambar{background:var(--ambar-fundo);color:#A9793C}
 .selo-coral{background:var(--coral-fundo);color:var(--coral)}
-.selo-neutro{background:var(--creme);color:var(--tinta-suave)}
+.selo-neutro{background:var(--neutro-fundo);color:var(--tinta-suave)}
 
 /* ---------- trilho pós-op (assinatura) ---------- */
 .trilho{display:flex;align-items:center;min-width:190px}
@@ -575,7 +704,20 @@ select.mini{width:auto;padding:6px 28px 6px 10px;font-size:.76rem;font-weight:50
 .grade-contagem{font-size:.7rem;white-space:nowrap;color:var(--tinta-suave)}
 .grade-envolto{max-height:calc(100vh - 265px);overflow:auto}
 table.grade{table-layout:auto}
-table.grade thead th{position:sticky;top:0;background:var(--papel);z-index:2;box-shadow:0 1px 0 var(--linha)}
+/* espelho visual do Google Sheets: cabeçalho azul, faixas alternadas e células de status pintadas */
+table.grade thead th{
+  position:sticky;top:0;z-index:2;background:var(--cabecalho-planilha);color:#fff;
+  box-shadow:0 1px 0 rgba(0,0,0,.08);
+}
+table.grade tbody tr:nth-child(odd){background:var(--papel)}
+table.grade tbody tr:nth-child(even){background:var(--creme)}
+table.grade td.celula-status{font-weight:600}
+table.grade td.cel-verde{background:var(--verde-fundo);color:#4E7A5D}
+table.grade td.cel-ambar{background:var(--ambar-fundo);color:#A9793C}
+table.grade td.cel-coral{background:var(--coral-fundo);color:var(--coral)}
+table.grade td.cel-azul{background:var(--azul-fundo);color:var(--azul-escuro)}
+table.grade td.cel-neutro{background:var(--neutro-fundo);color:var(--tinta-suave)}
+table.grade tbody tr:hover{box-shadow:inset 0 0 0 1px rgba(111,141,176,.45)}
 table.grade td.celula{
   padding:9px 12px;cursor:text;max-width:320px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;

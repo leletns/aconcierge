@@ -23,8 +23,25 @@
     <button class="filtro filtro-mes" id="btn-atencao-mes" type="button" title="mostrar só quem precisa de atenção este mês">🎯 atenção do mês</button>
     <button class="btn btn-claro" id="btn-exportar" type="button">exportar XLSX</button>
     <button class="btn btn-azul" id="btn-gestao" type="button">📊 resumo para gestão</button>
-    <a class="btn btn-suporte" id="btn-suporte" href="#" target="_blank" rel="noopener" title="falar com o suporte no WhatsApp"><svg class="ic-wa" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .611.611l4.458-1.495A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.372l-.357-.212-3.028 1.015 1.015-3.028-.212-.357A9.818 9.818 0 1 1 12 21.818z"/></svg>suporte</a>
+    <button class="btn btn-sino" id="btn-sino" type="button" title="notificações dos seus lembretes">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <span class="sino-badge" id="sino-badge" hidden></span>
+    </button>
+    <button class="btn btn-suporte" id="btn-suporte" type="button" title="tirar dúvida com a assistente ou falar com o Rafael"><svg class="ic-wa" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .611.611l4.458-1.495A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.372l-.357-.212-3.028 1.015 1.015-3.028-.212-.357A9.818 9.818 0 1 1 12 21.818z"/></svg>suporte</button>
     <div class="sync-status offline" id="sync-status"><span class="sync-dot"></span><span>aguardando</span></div>
+  </div>
+  <!-- painel de notificações (sino) -->
+  <div class="painel-sino" id="painel-sino" hidden>
+    <div class="painel-sino-topo">
+      <strong>notificações<span class="ponto">.</span></strong>
+      <button type="button" class="painel-sino-fechar" id="btn-sino-fechar" aria-label="fechar">×</button>
+    </div>
+    <div class="painel-sino-permissao" id="sino-permissao" hidden>
+      <span>ative os avisos do Mac para ser chamada na hora certa</span>
+      <button class="btn btn-azul btn-mini" id="btn-sino-permitir" type="button">ativar avisos</button>
+    </div>
+    <div id="sino-lista"></div>
+    <button class="painel-sino-rodape" id="btn-sino-ir" type="button">ver todos os lembretes →</button>
   </div>
 </header>
 
@@ -63,6 +80,7 @@
           <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <input type="search" id="busca-recall" placeholder="buscar… (⌘F)">
         </div>
+        <button class="btn btn-gemini" id="btn-analisar-recall" type="button" title="a assistente lê o recall e diz o que fazer hoje">✨ analisar recall</button>
         <button class="btn btn-azul" id="btn-nova-recall" type="button">＋ nova paciente</button>
       </div>
     </div>
@@ -113,8 +131,9 @@
     <div class="cartao lembretes-cartao">
       <div class="lem-add">
         <button type="button" class="lem-add-icone" id="lem-add-btn" title="criar lembrete com todos os detalhes" aria-label="novo lembrete">+</button>
-        <input id="lem-novo" placeholder="novo lembrete" autocomplete="off">
+        <input id="lem-novo" placeholder="ex.: ligar pra Ana amanhã 14h !!" autocomplete="off">
       </div>
+      <div class="lem-parse" id="lem-dica-parse" hidden></div>
       <div id="linhas-lembretes"></div>
       <div class="lem-rodape" id="lem-rodape" hidden>
         <button class="lem-toggle-feitos" id="lem-toggle-feitos" type="button"></button>
@@ -258,6 +277,18 @@
       <div class="campo-grupo"><label>URL da planilha Recall (opcional — botão "abrir no Google")</label><input class="campo" id="cfg-url-recall" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
       <div class="campo-grupo"><label>URL da planilha Cirurgias (opcional)</label><input class="campo" id="cfg-url-cirurgias" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
     </div>
+    <div class="cfg-gemini">
+      <strong>✨ Gemini (grátis) — análises e assistente</strong>
+      <span>Pegue a chave em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (plano gratuito, sem cartão) e cole abaixo.</span>
+      <div class="linha-campos">
+        <div class="campo-grupo" style="flex:2"><label>chave da API</label><input class="campo" id="cfg-gemini" type="password" placeholder="AIza..."></div>
+        <div class="campo-grupo"><label>modelo</label><select class="campo" id="cfg-gemini-modelo"></select></div>
+      </div>
+      <div class="cfg-gemini-acoes">
+        <button class="btn btn-claro" id="btn-testar-gemini" type="button">testar chave</button>
+        <span class="campo-hint" id="cfg-gemini-status"></span>
+      </div>
+    </div>
     <div class="link-magico-caixa">
       <strong>Mac da Helen — zero configuração</strong>
       Depois de conectar aqui, copie o link de instalação e use-o como atalho no Dock dela:
@@ -278,6 +309,7 @@
     <div class="modal-sub">igual ao app Lembretes: prioridade, quando lembrar e repetição</div>
     <div class="campo-grupo"><label>título</label><input class="campo" id="lem-titulo" placeholder="ex.: pedir resultado de exames da Mariana"></div>
     <div class="campo-grupo"><label>notas</label><textarea class="campo" id="lem-notas" rows="2" placeholder="detalhes (opcional)"></textarea></div>
+    <div class="lem-atalhos" id="lem-atalhos"></div>
     <div class="lem-sheet">
       <div class="lem-sheet-linha">
         <span class="lem-sheet-ico" aria-hidden="true">📅</span><span class="lem-sheet-label">data</span>
@@ -312,6 +344,24 @@
       <button class="btn btn-fantasma btn-perigo" id="btn-lem-excluir" type="button">excluir</button>
       <button class="btn btn-claro" id="btn-lem-ics" type="button" title="baixa o arquivo — ao abrir no Mac, entra no app Lembretes">⤓ p/ app Lembretes</button>
       <button class="btn btn-azul" id="btn-lem-salvar" type="button">salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: assistente / suporte ============ -->
+<div class="veu" id="veu-suporte">
+  <div class="modal modal-suporte">
+    <h3>posso ajudar<span class="ponto">?</span></h3>
+    <div class="modal-sub">pergunte sobre o sistema ou sobre o recall — se preferir, fale direto com o Rafael</div>
+    <div class="sup-sugestoes" id="sup-sugestoes"></div>
+    <div class="sup-conversa" id="sup-conversa"></div>
+    <div class="sup-entrada">
+      <input id="sup-campo" placeholder="escreva sua dúvida e tecle Enter…" autocomplete="off">
+      <button class="btn btn-azul" id="btn-sup-enviar" type="button">perguntar</button>
+    </div>
+    <div class="modal-rodape rodape-suporte">
+      <a class="btn btn-wa" id="btn-sup-wa" href="#" target="_blank" rel="noopener">falar com o Rafael no WhatsApp</a>
+      <button class="btn btn-claro" id="btn-sup-fechar" type="button">fechar</button>
     </div>
   </div>
 </div>
