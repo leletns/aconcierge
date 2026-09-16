@@ -89,6 +89,16 @@ export function semearExemplos() {
     ],
     cirurgias: [
       novaLinhaCirurgia({
+        data: fmtDataPlanilhaCirurgias('2025-11-12'),
+        paciente: 'Paciente Exemplo 2025',
+        cirurgia: 'Mamoplastia',
+        hospital: 'Copa Star',
+        m3m: 'Realizada',
+        m6m: 'Realizada',
+        m1a: 'Pendente',
+        exemplo: true,
+      }),
+      novaLinhaCirurgia({
         data: fmtDataPlanilhaCirurgias(somarDias(d, -100)),
         paciente: 'Paciente Exemplo Cirurgia',
         cirurgia: 'Lipedema MMII + Argoplasma + Morpheus',

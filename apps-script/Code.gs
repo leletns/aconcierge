@@ -156,6 +156,8 @@ function findDataSheet_(ss, kind) {
         if (rowNorm.some(function (h) { return h.indexOf('CIRURGIA') >= 0; })) score += 4;
         if (rowNorm.some(function (h) { return h.indexOf('HOSPITAL') >= 0; })) score += 2;
         if (rowNorm.some(function (h) { return h.indexOf('MESES') >= 0 || h.indexOf('ANO') >= 0; })) score += 2;
+        if (rowNorm.some(function (h) { return h === 'DATA' || h.indexOf('DATA') === 0; })) score += 3;
+        if (nome2.indexOf('CIRURG') >= 0) score += 5;
         if (r === 0) score += 3;
       }
       candidatos.push({ sheet: sheet2, headerRow: r + 1, score: score });

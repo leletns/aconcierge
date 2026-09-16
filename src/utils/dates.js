@@ -107,12 +107,12 @@ export const parseDataPt = (v) => {
     return `${a}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   }
 
-  // "05 jan. 2026" | "09 de Jan 2026" | "17 de Abril 2026" | "Sex, 09 de Jan 2026"
+  // "seg., 05 jan. 2026" | "Ter, 19 de maio 2025" — dia da semana opcional antes
   m = v
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .match(/(\d{1,2})\s*(?:de\s+)?([a-z]{3,9})\.?\s*(?:de\s+)?(\d{4})/);
+    .match(/(?:^|[\s,])(\d{1,2})\s*(?:de\s+)?([a-z]{3,9})\.?\s*(?:de\s+)?(20\d{2})\b/);
   if (m) {
     const mesKey = m[2];
     const mes = MESES_PT[mesKey] || MESES_PT[mesKey.slice(0, 3)];

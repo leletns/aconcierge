@@ -152,7 +152,7 @@ O checklist **não é mais uma lista genérica**. Ele aplica o protocolo do PDF 
 - Status **Pendente / Marcada / Realizada / Sem resposta** espelha as colunas da planilha.
 - Em **acompanhamentos**, Helen pode criar Botox (15/90/180), Lipedema, etc.
 - Na ficha da paciente: override de prazos só para aquela paciente.
-- **Cirurgias:** filtro por **ano** no topo (só anos com cirurgia na planilha) · busca · grade igual ao Google Sheets · duplo clique no nome = ficha
+- **Cirurgias:** filtro **todas** (padrão — espelho completo) ou por **ano** (2025, 2026…) · busca · grade igual ao Google Sheets
 
 ---
 
