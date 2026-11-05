@@ -32,6 +32,8 @@ pela UI (**conectar planilhas**) ou via `.env` — passo a passo completo em
 
 **Manual da Helen (uso diário):** [`docs/MANUAL-HELEN.md`](docs/MANUAL-HELEN.md)
 
+**Prompt da Alice (atendimento WhatsApp, tom high ticket):** [`docs/ALICE-PROMPT.md`](docs/ALICE-PROMPT.md)
+
 ## Funcionalidades
 
 | Feature | Descrição |
